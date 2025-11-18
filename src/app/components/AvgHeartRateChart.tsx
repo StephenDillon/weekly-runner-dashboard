@@ -26,7 +26,7 @@ export default function AvgHeartRateChart({ endDate }: AvgHeartRateChartProps) {
   
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-      <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white">Average Heart Rate per Mile</h2>
+      <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white">Average Heart Rate</h2>
       <div className="relative bg-gray-50 dark:bg-gray-900 rounded-lg p-4" style={{ height: '280px' }}>
         {/* Y-axis labels */}
         <div className="absolute left-0 top-0 bottom-0 flex flex-col justify-between text-xs text-gray-500 dark:text-gray-400 pr-2">

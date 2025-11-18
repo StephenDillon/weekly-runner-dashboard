@@ -6,9 +6,11 @@ import WeeklyMileageChart from "./components/WeeklyMileageChart";
 import AvgCadenceChart from "./components/AvgCadenceChart";
 import AvgHeartRateChart from "./components/AvgHeartRateChart";
 import { getLastFullWeek } from "./utils/dateUtils";
+import { useUnit } from "./context/UnitContext";
 
 export default function Home() {
   const [selectedWeek, setSelectedWeek] = useState<Date>(getLastFullWeek());
+  const { unit } = useUnit();
   
   return (
     <div className="min-h-screen font-sans bg-linear-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
@@ -17,7 +19,7 @@ export default function Home() {
         <WeekSelector selectedWeek={selectedWeek} onWeekChange={setSelectedWeek} />
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-          <WeeklyMileageChart endDate={selectedWeek} />
+          <WeeklyMileageChart endDate={selectedWeek} unit={unit} />
           <AvgCadenceChart endDate={selectedWeek} />
         </div>
         

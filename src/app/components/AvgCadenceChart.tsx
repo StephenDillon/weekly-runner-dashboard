@@ -28,9 +28,9 @@ export default function AvgCadenceChart({ endDate }: AvgCadenceChartProps) {
   const range = maxCadence - minCadence;
   
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-      <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white">Average Cadence per Week</h2>
-      <div className="relative bg-gray-50 dark:bg-gray-900 rounded-lg p-4 pt-8" style={{ height: '300px' }}>
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 flex flex-col h-full">
+      <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white h-8">Average Cadence</h2>
+      <div className="relative bg-gray-50 dark:bg-gray-900 rounded-lg p-4 pt-8 flex-1" style={{ minHeight: '300px' }}>
         <div className="h-full flex items-end justify-around gap-2">
           {sampleData.map((data, index) => {
             const heightPercent = range > 0 
@@ -56,7 +56,7 @@ export default function AvgCadenceChart({ endDate }: AvgCadenceChartProps) {
           })}
         </div>
       </div>
-      <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+      <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 h-14">
         <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
           <span>Min: <strong className="text-gray-800 dark:text-white">{minCadence} spm</strong></span>
           <span>Avg: <strong className="text-gray-800 dark:text-white">{Math.round(sampleData.reduce((sum, d) => sum + d.cadence, 0) / sampleData.length)} spm</strong></span>
