@@ -1,24 +1,27 @@
 "use client";
 
 import React from 'react';
+import { getWeeksBack, formatWeekLabel } from '../utils/dateUtils';
 
 interface WeekData {
   week: string;
   miles: number;
 }
 
-const sampleData: WeekData[] = [
-  { week: 'Week 1', miles: 12.5 },
-  { week: 'Week 2', miles: 15.2 },
-  { week: 'Week 3', miles: 18.7 },
-  { week: 'Week 4', miles: 14.3 },
-  { week: 'Week 5', miles: 21.4 },
-  { week: 'Week 6', miles: 19.8 },
-  { week: 'Week 7', miles: 23.1 },
-  { week: 'Week 8', miles: 20.5 },
-];
+interface WeeklyMileageChartProps {
+  endDate: Date;
+}
 
-export default function WeeklyMileageChart() {
+// Sample mileage data for 8 weeks
+const sampleMiles = [12.5, 15.2, 18.7, 14.3, 21.4, 19.8, 23.1, 20.5];
+
+export default function WeeklyMileageChart({ endDate }: WeeklyMileageChartProps) {
+  const weeks = getWeeksBack(8, endDate);
+  const sampleData: WeekData[] = weeks.map((date, index) => ({
+    week: formatWeekLabel(date),
+    miles: sampleMiles[index]
+  }));
+  
   const maxMiles = Math.max(...sampleData.map(d => d.miles));
   
   return (

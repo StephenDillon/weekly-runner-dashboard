@@ -1,24 +1,26 @@
 "use client";
 
 import React from 'react';
+import { getWeeksBack, formatWeekLabel } from '../utils/dateUtils';
 
 interface HeartRateData {
   week: string;
   heartRate: number; // bpm per mile
 }
 
-const sampleData: HeartRateData[] = [
-  { week: 'Week 1', heartRate: 165 },
-  { week: 'Week 2', heartRate: 162 },
-  { week: 'Week 3', heartRate: 158 },
-  { week: 'Week 4', heartRate: 160 },
-  { week: 'Week 5', heartRate: 155 },
-  { week: 'Week 6', heartRate: 157 },
-  { week: 'Week 7', heartRate: 152 },
-  { week: 'Week 8', heartRate: 154 },
-];
+interface AvgHeartRateChartProps {
+  endDate: Date;
+}
 
-export default function AvgHeartRateChart() {
+// Sample heart rate data for 8 weeks (bpm)
+const sampleHeartRates = [165, 162, 158, 160, 155, 157, 152, 154];
+
+export default function AvgHeartRateChart({ endDate }: AvgHeartRateChartProps) {
+  const weeks = getWeeksBack(8, endDate);
+  const sampleData: HeartRateData[] = weeks.map((date, index) => ({
+    week: formatWeekLabel(date),
+    heartRate: sampleHeartRates[index]
+  }));
   const maxHR = Math.max(...sampleData.map(d => d.heartRate));
   const minHR = Math.min(...sampleData.map(d => d.heartRate));
   
@@ -88,7 +90,7 @@ export default function AvgHeartRateChart() {
           <div className="flex justify-between mt-2">
             {sampleData.map((data, index) => (
               <span key={index} className="text-xs text-gray-600 dark:text-gray-300 font-medium">
-                {data.week.replace('Week ', 'W')}
+                {data.week}
               </span>
             ))}
           </div>
