@@ -13,11 +13,13 @@ export interface WeeklyMetrics {
  * Aggregates Strava activities into weekly metrics
  * @param activities - Array of Strava activities
  * @param weeks - Array of week start dates (Sundays)
+ * @param disabledActivityIds - Set of disabled activity IDs to exclude from calculations
  * @returns Array of weekly metrics aligned with the weeks array
  */
 export function aggregateActivitiesByWeek(
   activities: StravaActivity[],
-  weeks: Date[]
+  weeks: Date[],
+  disabledActivityIds: Set<number> = new Set()
 ): WeeklyMetrics[] {
   return weeks.map((weekStart) => {
     const weekEnd = new Date(weekStart);
@@ -29,15 +31,20 @@ export function aggregateActivitiesByWeek(
       return activityDate >= weekStart && activityDate < weekEnd;
     });
 
+    // Filter out disabled activities for calculations
+    const enabledActivities = weekActivities.filter(
+      (activity) => !disabledActivityIds.has(activity.id)
+    );
+
     // Calculate total distance (convert from meters to miles)
-    const totalDistance = weekActivities.reduce(
+    const totalDistance = enabledActivities.reduce(
       (sum, activity) => sum + metersToMiles(activity.distance),
       0
     );
 
     // Calculate average cadence (only for activities that have cadence data)
     // Note: Strava returns cadence as "strides per minute" for runs, multiply by 2 for steps per minute
-    const activitiesWithCadence = weekActivities.filter(
+    const activitiesWithCadence = enabledActivities.filter(
       (a) => a.average_cadence !== undefined && a.average_cadence !== null && a.average_cadence > 0
     );
     const averageCadence =
@@ -47,7 +54,7 @@ export function aggregateActivitiesByWeek(
         : null;
 
     // Calculate average heart rate (only for activities that have HR data)
-    const activitiesWithHR = weekActivities.filter(
+    const activitiesWithHR = enabledActivities.filter(
       (a) => a.average_heartrate !== undefined && a.average_heartrate !== null
     );
     const averageHeartRate =
@@ -61,7 +68,7 @@ export function aggregateActivitiesByWeek(
       totalDistance,
       averageCadence,
       averageHeartRate,
-      activityCount: weekActivities.length,
+      activityCount: enabledActivities.length,
       activities: weekActivities,
     };
   });
