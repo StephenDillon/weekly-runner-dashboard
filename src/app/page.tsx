@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import WeekSelector from "./components/WeekSelector";
 import WeeklyMileageChart from "./components/WeeklyMileageChart";
+import LongestDistanceChart from "./components/LongestDistanceChart";
 import AvgCadenceChart from "./components/AvgCadenceChart";
 import ConnectStrava from "./components/ConnectStrava";
 import { getLastFullWeek } from "./utils/dateUtils";
@@ -75,6 +76,10 @@ export default function Home() {
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
           <WeeklyMileageChart endDate={selectedWeek} unit={unit} />
+          <LongestDistanceChart endDate={selectedWeek} unit={unit} />
+        </div>
+
+        <div className="grid grid-cols-1 gap-8 mb-8">
           <AvgCadenceChart endDate={selectedWeek} />
         </div>
       </div>

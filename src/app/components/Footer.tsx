@@ -27,7 +27,7 @@ export default function Footer() {
                 For informational purposes only.
               </span>
               <span className="text-gray-600 dark:text-gray-400 text-sm">
-                © {currentYear} Running Dashboard. All rights reserved.
+                © {currentYear} Weekly Running Dashboard. All rights reserved.
               </span>
             </div>
           </div>

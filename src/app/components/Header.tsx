@@ -15,7 +15,7 @@ export default function Header({ onConfigToggle, showConfig }: HeaderProps) {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-5xl font-bold text-gray-900 dark:text-white mb-4">
-              Running Dashboard 🏃
+              Weekly Running Dashboard 🏃
             </h1>
             <p className="text-lg text-gray-600 dark:text-gray-300">
               Track your running progress and performance metrics

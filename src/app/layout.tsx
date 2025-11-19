@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Running Dashboard",
-  description: "A simple dashboard to track my running stats from Strava.",
+  title: "Weekly Running Dashboard",
+  description: "A simple dashboard to track my running stats week over week from Strava.",
 };
 
 export default function RootLayout({

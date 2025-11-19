@@ -1,4 +1,4 @@
-# Strava Runner Dashboard
+# Weekly Runner Dashboard
 
 A Next.js dashboard for tracking running statistics from Strava.
 
@@ -30,8 +30,8 @@ A Next.js dashboard for tracking running statistics from Strava.
 
 1. Clone the repository:
 ```bash
-git clone git@github.com:StephenDillon/strava-runner-dashboard.git
-cd strava-runner-dashboard
+git clone git@github.com:StephenDillon/weekly-runner-dashboard.git
+cd weekly-runner-dashboard
 ```
 
 2. Install dependencies:
