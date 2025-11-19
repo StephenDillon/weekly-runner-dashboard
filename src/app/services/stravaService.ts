@@ -133,34 +133,9 @@ export class StravaService {
       }
     );
 
-    // If unauthorized, try refreshing the token and retry once
-    if (response.status === 401) {
-      console.log('Token invalid, attempting refresh...');
-      const newToken = await this.refreshAccessToken();
-      
-      // Retry with new token
-      const retryResponse = await fetch(
-        `${STRAVA_API_BASE}/athlete/activities?${params.toString()}`,
-        {
-          headers: {
-            Authorization: `Bearer ${newToken}`,
-          },
-        }
-      );
-
-      if (!retryResponse.ok) {
-        const errorText = await retryResponse.text();
-        console.error('Failed to fetch activities after token refresh:', retryResponse.status, errorText);
-        throw new Error('Failed to fetch activities after token refresh');
-      }
-
-      return await retryResponse.json();
-    }
-
     if (!response.ok) {
-
       const errorText = await response.text();
-        console.error('Failed to fetch activities:', response.status, errorText);
+      console.error('Failed to fetch activities:', response.status, errorText);
       throw new Error('Failed to fetch activities');
     }
 
