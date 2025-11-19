@@ -12,7 +12,7 @@ interface WeekSelectorProps {
 
 export default function WeekSelector({ selectedWeek, onWeekChange }: WeekSelectorProps) {
   const { unit, setUnit } = useUnit();
-  const { weekStartDay, setWeekStartDay } = useWeekStart();
+  const { weekStartDay, setWeekStartDay, weeksToDisplay, setWeeksToDisplay } = useWeekStart();
   const { showConfig } = useConfig();
   
   const formatDate = (date: Date) => {
@@ -54,23 +54,20 @@ export default function WeekSelector({ selectedWeek, onWeekChange }: WeekSelecto
   return (
     <div className="mb-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 transition-all">
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-4">
-          <label htmlFor="week-selector" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            Select Newest Week To Display:
-          </label>
-          <input
-            id="week-selector"
-            type="date"
-            value={formatDate(selectedWeek)}
-            onChange={handleChange}
-            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <span className="text-sm text-gray-600 dark:text-gray-400">
-            (Showing 8 weeks from {weekStartDay})
-          </span>
-        </div>
-        
         <div className="flex gap-4">
+          <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+            <label htmlFor="week-selector" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Select Ending Week
+            </label>
+            <input
+              id="week-selector"
+              type="date"
+              value={formatDate(selectedWeek)}
+              onChange={handleChange}
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+            />
+          </div>
+        
           <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
             <label htmlFor="week-start-selector" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Week Starts On
@@ -89,6 +86,26 @@ export default function WeekSelector({ selectedWeek, onWeekChange }: WeekSelecto
             </select>
           </div>
         
+          <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+            <label htmlFor="weeks-to-display" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Weeks to Display
+            </label>
+            <input
+              id="weeks-to-display"
+              type="number"
+              min="1"
+              max="52"
+              value={weeksToDisplay}
+              onChange={(e) => {
+                const value = parseInt(e.target.value, 10);
+                if (!isNaN(value)) {
+                  setWeeksToDisplay(value);
+                }
+              }}
+              className="w-20 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+            />
+          </div>
+
           <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Distance Unit

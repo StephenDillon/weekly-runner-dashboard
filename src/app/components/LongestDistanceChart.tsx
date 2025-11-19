@@ -22,9 +22,9 @@ interface LongestDistanceChartProps {
 const milesToKm = (miles: number) => miles * 1.60934;
 
 export default function LongestDistanceChart({ endDate, unit }: LongestDistanceChartProps) {
-  const { weekStartDay } = useWeekStart();
+  const { weekStartDay, weeksToDisplay } = useWeekStart();
   const { disabledActivities, toggleActivity, isActivityDisabled } = useDisabledActivities();
-  const weeks = getWeeksBack(8, endDate);
+  const weeks = getWeeksBack(weeksToDisplay, endDate);
   const [hoveredWeek, setHoveredWeek] = useState<number | null>(null);
   const [lockedWeek, setLockedWeek] = useState<number | null>(null);
   const tooltipRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -70,7 +70,7 @@ export default function LongestDistanceChart({ endDate, unit }: LongestDistanceC
   const { activities, loading, error } = useStravaActivities(startDate, apiEndDate);
 
   const weeklyLongestRuns = useMemo(() => {
-    const weekStarts = generateWeekStarts(endDate, 8);
+    const weekStarts = generateWeekStarts(endDate, weeksToDisplay);
     
     return weekStarts.map((weekStart) => {
       const weekEnd = new Date(weekStart);
@@ -95,7 +95,7 @@ export default function LongestDistanceChart({ endDate, unit }: LongestDistanceC
         longestDistance: longestRun ? metersToMiles(longestRun.distance) : 0,
       };
     });
-  }, [activities, endDate, disabledActivities]);
+  }, [activities, endDate, disabledActivities, weeksToDisplay]);
 
   const convertedData = useMemo(() => {
     return weeks.map((date, index) => ({

@@ -18,9 +18,9 @@ interface AvgCadenceChartProps {
 }
 
 export default function AvgCadenceChart({ endDate }: AvgCadenceChartProps) {
-  const { weekStartDay } = useWeekStart();
+  const { weekStartDay, weeksToDisplay } = useWeekStart();
   const { disabledActivities, toggleActivity, isActivityDisabled } = useDisabledActivities();
-  const weeks = getWeeksBack(8, endDate);
+  const weeks = getWeeksBack(weeksToDisplay, endDate);
   const [hoveredWeek, setHoveredWeek] = useState<number | null>(null);
   const [lockedWeek, setLockedWeek] = useState<number | null>(null);
   const tooltipRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -68,9 +68,9 @@ export default function AvgCadenceChart({ endDate }: AvgCadenceChartProps) {
   const { activities, loading, error } = useStravaActivities(startDate, apiEndDate);
 
   const weeklyMetrics = useMemo(() => {
-    const weekStarts = generateWeekStarts(endDate, 8);
+    const weekStarts = generateWeekStarts(endDate, weeksToDisplay);
     return aggregateActivitiesByWeek(activities, weekStarts, disabledActivities);
-  }, [activities, endDate, disabledActivities]);
+  }, [activities, endDate, disabledActivities, weeksToDisplay]);
 
   const chartData: CadenceData[] = useMemo(() => {
     return weeks.map((date, index) => ({

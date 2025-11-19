@@ -9,18 +9,29 @@ export const DAYS_OF_WEEK: WeekStartDay[] = ['Sunday', 'Monday', 'Tuesday', 'Wed
 interface WeekStartContextType {
   weekStartDay: WeekStartDay;
   setWeekStartDay: (day: WeekStartDay) => void;
+  weeksToDisplay: number;
+  setWeeksToDisplay: (weeks: number) => void;
 }
 
 const WeekStartContext = createContext<WeekStartContextType | undefined>(undefined);
 
 export function WeekStartProvider({ children }: { children: ReactNode }) {
   const [weekStartDay, setWeekStartDayState] = useState<WeekStartDay>('Sunday');
+  const [weeksToDisplay, setWeeksToDisplayState] = useState<number>(8);
 
   // Load from localStorage on mount
   useEffect(() => {
     const stored = localStorage.getItem('week_start_day');
     if (stored && DAYS_OF_WEEK.includes(stored as WeekStartDay)) {
       setWeekStartDayState(stored as WeekStartDay);
+    }
+
+    const storedWeeks = localStorage.getItem('weeks_to_display');
+    if (storedWeeks) {
+      const weeks = parseInt(storedWeeks, 10);
+      if (!isNaN(weeks) && weeks >= 1 && weeks <= 52) {
+        setWeeksToDisplayState(weeks);
+      }
     }
   }, []);
 
@@ -29,8 +40,15 @@ export function WeekStartProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('week_start_day', day);
   };
 
+  const setWeeksToDisplay = (weeks: number) => {
+    if (weeks >= 1 && weeks <= 52) {
+      setWeeksToDisplayState(weeks);
+      localStorage.setItem('weeks_to_display', weeks.toString());
+    }
+  };
+
   return (
-    <WeekStartContext.Provider value={{ weekStartDay, setWeekStartDay }}>
+    <WeekStartContext.Provider value={{ weekStartDay, setWeekStartDay, weeksToDisplay, setWeeksToDisplay }}>
       {children}
     </WeekStartContext.Provider>
   );
