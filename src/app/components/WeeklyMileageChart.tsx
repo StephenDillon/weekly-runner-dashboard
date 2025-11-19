@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useRef } from 'react';
 import { getWeeksBack, formatWeekLabel, formatWeekTooltip } from '../utils/dateUtils';
 import { useStravaActivities } from '../hooks/useStravaActivities';
 import { aggregateActivitiesByWeek, generateWeekStarts, milesToKilometers, metersToMiles } from '../utils/activityAggregation';
@@ -25,7 +25,6 @@ export default function WeeklyMileageChart({ endDate, unit }: WeeklyMileageChart
   const { weekStartDay } = useWeekStart();
   const { disabledActivities, toggleActivity, isActivityDisabled } = useDisabledActivities();
   const weeks = getWeeksBack(8, endDate);
-  const [openWeek, setOpenWeek] = useState<number | null>(null);
   const [hoveredWeek, setHoveredWeek] = useState<number | null>(null);
   const [lockedWeek, setLockedWeek] = useState<number | null>(null);
   const tooltipRefs = useRef<(HTMLDivElement | null)[]>([]);

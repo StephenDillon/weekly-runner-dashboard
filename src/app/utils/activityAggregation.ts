@@ -4,7 +4,6 @@ export interface WeeklyMetrics {
   weekStartDate: Date;
   totalDistance: number; // in miles
   averageCadence: number | null;
-  averageHeartRate: number | null;
   activityCount: number;
   activities: StravaActivity[]; // Activities for this week
 }
@@ -53,21 +52,10 @@ export function aggregateActivitiesByWeek(
           activitiesWithCadence.length) * 2 // Convert strides/min to steps/min
         : null;
 
-    // Calculate average heart rate (only for activities that have HR data)
-    const activitiesWithHR = enabledActivities.filter(
-      (a) => a.average_heartrate !== undefined && a.average_heartrate !== null
-    );
-    const averageHeartRate =
-      activitiesWithHR.length > 0
-        ? activitiesWithHR.reduce((sum, a) => sum + (a.average_heartrate || 0), 0) /
-          activitiesWithHR.length
-        : null;
-
     return {
       weekStartDate: weekStart,
       totalDistance,
       averageCadence,
-      averageHeartRate,
       activityCount: enabledActivities.length,
       activities: weekActivities,
     };
