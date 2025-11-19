@@ -10,12 +10,19 @@ import ConnectStrava from "./components/ConnectStrava";
 import { getLastFullWeek } from "./utils/dateUtils";
 import { useUnit } from "./context/UnitContext";
 import { useStravaAuth } from "./context/StravaAuthContext";
+import { useWeekStart } from "./context/WeekStartContext";
 
 export default function Home() {
-  const [selectedWeek, setSelectedWeek] = useState<Date>(getLastFullWeek());
+  const { weekStartDay } = useWeekStart();
+  const [selectedWeek, setSelectedWeek] = useState<Date>(getLastFullWeek(weekStartDay));
   const { unit } = useUnit();
   const { isAuthenticated, setIsAuthenticated, checkAuth } = useStravaAuth();
   const searchParams = useSearchParams();
+
+  // Update selected week when week start day changes
+  useEffect(() => {
+    setSelectedWeek(getLastFullWeek(weekStartDay));
+  }, [weekStartDay]);
 
   useEffect(() => {
     // Check if user just completed OAuth

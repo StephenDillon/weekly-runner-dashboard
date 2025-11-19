@@ -1,28 +1,75 @@
 "use client";
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { getWeeksBack, formatWeekLabel } from '../utils/dateUtils';
+import { useStravaActivities } from '../hooks/useStravaActivities';
+import { aggregateActivitiesByWeek, generateWeekStarts } from '../utils/activityAggregation';
 
 interface HeartRateData {
   week: string;
-  heartRate: number; // bpm per mile
+  heartRate: number | null; // bpm
 }
 
 interface AvgHeartRateChartProps {
   endDate: Date;
 }
 
-// Sample heart rate data for 8 weeks (bpm)
-const sampleHeartRates = [165, 162, 158, 160, 155, 157, 152, 154];
-
 export default function AvgHeartRateChart({ endDate }: AvgHeartRateChartProps) {
   const weeks = getWeeksBack(8, endDate);
-  const sampleData: HeartRateData[] = weeks.map((date, index) => ({
-    week: formatWeekLabel(date),
-    heartRate: sampleHeartRates[index]
-  }));
-  const maxHR = Math.max(...sampleData.map(d => d.heartRate));
-  const minHR = Math.min(...sampleData.map(d => d.heartRate));
+  
+  // Calculate date range for API call
+  const startDate = useMemo(() => {
+    const start = new Date(weeks[0]);
+    start.setHours(0, 0, 0, 0);
+    return start;
+  }, [weeks]);
+
+  const apiEndDate = useMemo(() => {
+    const end = new Date(endDate);
+    end.setDate(end.getDate() + 7);
+    end.setHours(23, 59, 59, 999);
+    return end;
+  }, [endDate]);
+
+  const { activities, loading, error } = useStravaActivities(startDate, apiEndDate);
+
+  const weeklyMetrics = useMemo(() => {
+    const weekStarts = generateWeekStarts(endDate, 8);
+    return aggregateActivitiesByWeek(activities, weekStarts);
+  }, [activities, endDate]);
+
+  const chartData: HeartRateData[] = useMemo(() => {
+    return weeks.map((date, index) => ({
+      week: formatWeekLabel(date),
+      heartRate: weeklyMetrics[index]?.averageHeartRate || null
+    }));
+  }, [weeks, weeklyMetrics]);
+
+  const validHeartRates = chartData.filter(d => d.heartRate !== null).map(d => d.heartRate!);
+  const maxHR = validHeartRates.length > 0 ? Math.max(...validHeartRates) : 180;
+  const minHR = validHeartRates.length > 0 ? Math.min(...validHeartRates) : 120;
+  
+  if (loading) {
+    return (
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+        <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white">Average Heart Rate</h2>
+        <div className="flex items-center justify-center" style={{ height: '280px' }}>
+          <div className="text-gray-500 dark:text-gray-400">Loading activities...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+        <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white">Average Heart Rate</h2>
+        <div className="flex items-center justify-center" style={{ height: '280px' }}>
+          <div className="text-red-500">Error loading activities: {error}</div>
+        </div>
+      </div>
+    );
+  }
   
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
@@ -44,22 +91,29 @@ export default function AvgHeartRateChart({ endDate }: AvgHeartRateChartProps) {
             <line x1="0" y1="250" x2="800" y2="250" stroke="currentColor" className="text-gray-300 dark:text-gray-700" strokeWidth="1" />
             
             {/* Line chart */}
-            <polyline
-              fill="none"
-              stroke="url(#gradient)"
-              strokeWidth="3"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              points={sampleData.map((data, index) => {
-                const x = (index / (sampleData.length - 1)) * 800;
-                const y = ((maxHR + 10 - data.heartRate) / 30) * 250;
-                return `${x},${y}`;
-              }).join(' ')}
-            />
+            {validHeartRates.length > 0 && (
+              <polyline
+                fill="none"
+                stroke="url(#gradient)"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                points={chartData
+                  .map((data, index) => {
+                    if (data.heartRate === null) return null;
+                    const x = (index / (chartData.length - 1)) * 800;
+                    const y = ((maxHR + 10 - data.heartRate) / 30) * 250;
+                    return `${x},${y}`;
+                  })
+                  .filter(Boolean)
+                  .join(' ')}
+              />
+            )}
             
             {/* Data points */}
-            {sampleData.map((data, index) => {
-              const x = (index / (sampleData.length - 1)) * 800;
+            {chartData.map((data, index) => {
+              if (data.heartRate === null) return null;
+              const x = (index / (chartData.length - 1)) * 800;
               const y = ((maxHR + 10 - data.heartRate) / 30) * 250;
               return (
                 <g key={index}>
@@ -88,7 +142,7 @@ export default function AvgHeartRateChart({ endDate }: AvgHeartRateChartProps) {
           
           {/* X-axis labels */}
           <div className="flex justify-between mt-2">
-            {sampleData.map((data, index) => (
+            {chartData.map((data, index) => (
               <span key={index} className="text-xs text-gray-600 dark:text-gray-300 font-medium">
                 {data.week}
               </span>
@@ -98,9 +152,15 @@ export default function AvgHeartRateChart({ endDate }: AvgHeartRateChartProps) {
       </div>
       <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
         <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
-          <span>Min: <strong className="text-gray-800 dark:text-white">{minHR} bpm</strong></span>
-          <span>Avg: <strong className="text-gray-800 dark:text-white">{Math.round(sampleData.reduce((sum, d) => sum + d.heartRate, 0) / sampleData.length)} bpm</strong></span>
-          <span>Max: <strong className="text-gray-800 dark:text-white">{maxHR} bpm</strong></span>
+          {validHeartRates.length > 0 ? (
+            <>
+              <span>Min: <strong className="text-gray-800 dark:text-white">{Math.round(minHR)} bpm</strong></span>
+              <span>Avg: <strong className="text-gray-800 dark:text-white">{Math.round(validHeartRates.reduce((sum, hr) => sum + hr, 0) / validHeartRates.length)} bpm</strong></span>
+              <span>Max: <strong className="text-gray-800 dark:text-white">{Math.round(maxHR)} bpm</strong></span>
+            </>
+          ) : (
+            <span className="text-gray-500">No heart rate data available</span>
+          )}
         </div>
       </div>
     </div>

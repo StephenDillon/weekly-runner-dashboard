@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { useUnit } from '../context/UnitContext';
+import { useWeekStart, DAYS_OF_WEEK } from '../context/WeekStartContext';
 import { useConfig } from './ClientLayout';
 
 interface WeekSelectorProps {
@@ -11,19 +12,38 @@ interface WeekSelectorProps {
 
 export default function WeekSelector({ selectedWeek, onWeekChange }: WeekSelectorProps) {
   const { unit, setUnit } = useUnit();
+  const { weekStartDay, setWeekStartDay } = useWeekStart();
   const { showConfig } = useConfig();
   
   const formatDate = (date: Date) => {
     return date.toISOString().split('T')[0];
   };
 
+  const DAY_TO_NUMBER: Record<string, number> = {
+    'Sunday': 0,
+    'Monday': 1,
+    'Tuesday': 2,
+    'Wednesday': 3,
+    'Thursday': 4,
+    'Friday': 5,
+    'Saturday': 6
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newDate = new Date(e.target.value);
-    // Set to end of selected week (Saturday)
+    // Adjust to the start of the selected week
     const dayOfWeek = newDate.getDay();
-    const daysToSaturday = 6 - dayOfWeek;
-    newDate.setDate(newDate.getDate() + daysToSaturday);
-    newDate.setHours(23, 59, 59, 999);
+    const startDayNum = DAY_TO_NUMBER[weekStartDay];
+    
+    let daysToStart;
+    if (dayOfWeek >= startDayNum) {
+      daysToStart = dayOfWeek - startDayNum;
+    } else {
+      daysToStart = 7 - (startDayNum - dayOfWeek);
+    }
+    
+    newDate.setDate(newDate.getDate() - daysToStart);
+    newDate.setHours(0, 0, 0, 0);
     onWeekChange(newDate);
   };
 
@@ -33,10 +53,10 @@ export default function WeekSelector({ selectedWeek, onWeekChange }: WeekSelecto
 
   return (
     <div className="mb-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 transition-all">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-4">
           <label htmlFor="week-selector" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            Select Week Ending:
+            Select Week:
           </label>
           <input
             id="week-selector"
@@ -46,11 +66,30 @@ export default function WeekSelector({ selectedWeek, onWeekChange }: WeekSelecto
             className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <span className="text-sm text-gray-600 dark:text-gray-400">
-            (Showing 8 weeks ending this date)
+            (Showing 8 weeks from {weekStartDay})
           </span>
         </div>
         
-        <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+        <div className="flex gap-4">
+          <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+            <label htmlFor="week-start-selector" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Week Starts On
+            </label>
+            <select
+              id="week-start-selector"
+              value={weekStartDay}
+              onChange={(e) => setWeekStartDay(e.target.value as typeof weekStartDay)}
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer"
+            >
+              {DAYS_OF_WEEK.map((day) => (
+                <option key={day} value={day}>
+                  {day}
+                </option>
+              ))}
+            </select>
+          </div>
+        
+          <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Distance Unit
           </label>
@@ -76,6 +115,7 @@ export default function WeekSelector({ selectedWeek, onWeekChange }: WeekSelecto
               Kilometers
             </button>
           </div>
+        </div>
         </div>
       </div>
     </div>

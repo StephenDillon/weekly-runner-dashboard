@@ -1,7 +1,11 @@
 "use client";
 
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { getWeeksBack, formatWeekLabel, formatWeekTooltip } from '../utils/dateUtils';
+import { useStravaActivities } from '../hooks/useStravaActivities';
+import { aggregateActivitiesByWeek, generateWeekStarts, milesToKilometers, metersToMiles } from '../utils/activityAggregation';
+import { useWeekStart } from '../context/WeekStartContext';
+import { StravaActivity } from '../types/strava';
 
 interface WeekData {
   week: string;
@@ -14,49 +18,163 @@ interface WeeklyMileageChartProps {
   unit: 'miles' | 'kilometers';
 }
 
-// Sample mileage data for 8 weeks (in miles)
-const sampleMiles = [12.5, 15.2, 18.7, 14.3, 21.4, 19.8, 23.1, 20.5];
-
 const milesToKm = (miles: number) => miles * 1.60934;
 
 export default function WeeklyMileageChart({ endDate, unit }: WeeklyMileageChartProps) {
+  const { weekStartDay } = useWeekStart();
   const weeks = getWeeksBack(8, endDate);
-  const sampleData: WeekData[] = weeks.map((date, index) => ({
-    week: formatWeekLabel(date),
-    weekTooltip: formatWeekTooltip(date),
-    miles: sampleMiles[index]
-  }));
+  const [openWeek, setOpenWeek] = useState<number | null>(null);
+  const [hoveredWeek, setHoveredWeek] = useState<number | null>(null);
+  const [lockedWeek, setLockedWeek] = useState<number | null>(null);
+
+  const toggleWeek = (index: number) => {
+    if (lockedWeek === index) {
+      setLockedWeek(null);
+    } else {
+      setLockedWeek(index);
+    }
+  };
+
+  const handleMouseEnter = (index: number) => {
+    if (lockedWeek === null) {
+      setHoveredWeek(index);
+    }
+  };
+
+  const handleMouseLeave = () => {
+    if (lockedWeek === null) {
+      setHoveredWeek(null);
+    }
+  };
+
+  const isOpen = (index: number) => {
+    return lockedWeek === index || (lockedWeek === null && hoveredWeek === index);
+  };
   
-  const convertedData = sampleData.map(d => ({
-    ...d,
-    distance: unit === 'kilometers' ? milesToKm(d.miles) : d.miles
-  }));
+  // Calculate date range for API call
+  const startDate = useMemo(() => {
+    const start = new Date(weeks[0]);
+    start.setHours(0, 0, 0, 0);
+    return start;
+  }, [weeks]);
+
+  const apiEndDate = useMemo(() => {
+    const end = new Date(endDate);
+    end.setDate(end.getDate() + 7); // Include full week
+    end.setHours(23, 59, 59, 999);
+    return end;
+  }, [endDate]);
+
+  const { activities, loading, error } = useStravaActivities(startDate, apiEndDate);
+
+  const weeklyMetrics = useMemo(() => {
+    const weekStarts = generateWeekStarts(endDate, 8);
+    return aggregateActivitiesByWeek(activities, weekStarts);
+  }, [activities, endDate]);
+
+  const convertedData = useMemo(() => {
+    return weeks.map((date, index) => ({
+      week: formatWeekLabel(date),
+      weekTooltip: formatWeekTooltip(date, weekStartDay),
+      miles: weeklyMetrics[index]?.totalDistance || 0,
+      distance: unit === 'kilometers' 
+        ? milesToKm(weeklyMetrics[index]?.totalDistance || 0)
+        : (weeklyMetrics[index]?.totalDistance || 0)
+    }));
+  }, [weeks, weeklyMetrics, unit, weekStartDay]);
   
-  const maxDistance = Math.max(...convertedData.map(d => d.distance));
+  const maxDistance = Math.max(...convertedData.map(d => d.distance), 1);
   const unitLabel = unit === 'kilometers' ? 'km' : 'mi';
   const unitLabelLong = unit === 'kilometers' ? 'kilometers' : 'miles';
   
+  if (loading) {
+    return (
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 flex flex-col h-full">
+        <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white h-8">Total Distance</h2>
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-gray-500 dark:text-gray-400">Loading activities...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 flex flex-col h-full">
+        <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white h-8">Total Distance</h2>
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-red-500">Error loading activities: {error}</div>
+        </div>
+      </div>
+    );
+  }
+  
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 flex flex-col h-full">
-      <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white h-8">Total Distance</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-2xl font-bold text-gray-800 dark:text-white h-8">Total Distance</h2>
+        <span className="text-xs text-gray-500 dark:text-gray-400 italic">Click bar to view activities</span>
+      </div>
       <div className="space-y-3 flex-1" style={{ minHeight: '300px' }}>
-        {convertedData.map((data, index) => (
-          <div key={index} className="flex items-center gap-3">
-            <div className="w-20 text-sm font-medium text-gray-600 dark:text-gray-300 cursor-help" title={data.weekTooltip}>
-              {data.week}
-            </div>
-            <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-8 relative overflow-hidden">
-              <div
-                className="bg-linear-to-r from-blue-500 to-indigo-600 h-full rounded-full flex items-center justify-end pr-3 transition-all duration-500"
-                style={{ width: `${(data.distance / maxDistance) * 100}%` }}
+        {convertedData.map((data, index) => {
+          const weekActivities = weeklyMetrics[index]?.activities || [];
+          
+          return (
+            <div key={index} className="flex items-center gap-3 relative">
+              <div className="w-20 text-sm font-medium text-gray-600 dark:text-gray-300 cursor-help" title={data.weekTooltip}>
+                {data.week}
+              </div>
+              <div 
+                className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-8 relative overflow-visible"
+                onClick={() => toggleWeek(index)}
+                onMouseEnter={() => handleMouseEnter(index)}
+                onMouseLeave={handleMouseLeave}
               >
-                <span className="text-white text-sm font-semibold">
-                  {data.distance.toFixed(1)} {unitLabel}
-                </span>
+                <div
+                  className="bg-linear-to-r from-blue-500 to-indigo-600 h-full rounded-full flex items-center justify-end pr-3 transition-all duration-500 cursor-pointer hover:opacity-90"
+                  style={{ width: `${(data.distance / maxDistance) * 100}%` }}
+                >
+                  <span className="text-white text-sm font-semibold">
+                    {data.distance.toFixed(1)} {unitLabel}
+                  </span>
+                </div>
+                
+                {isOpen(index) && weekActivities.length > 0 && (
+                  <div className="absolute left-0 top-10 z-50 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg shadow-xl p-3 min-w-[300px] max-w-[400px]">
+                    <div className="text-xs font-semibold text-gray-700 dark:text-gray-200 mb-1">
+                      {weekActivities.length} {weekActivities.length === 1 ? 'Activity' : 'Activities'} this week:
+                    </div>
+                    <div className="text-[10px] text-gray-500 dark:text-gray-400 mb-2 italic">
+                      Click to keep open, click again to close
+                    </div>
+                    <div className="space-y-1 max-h-60 overflow-y-auto">
+                      {weekActivities.map((activity) => {
+                        const distance = unit === 'kilometers' 
+                          ? (metersToMiles(activity.distance) * 1.60934).toFixed(2)
+                          : metersToMiles(activity.distance).toFixed(2);
+                        return (
+                          <a
+                            key={activity.id}
+                            href={`https://www.strava.com/activities/${activity.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline py-1 px-2 rounded hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+                          >
+                            <div className="font-medium">{activity.name}</div>
+                            <div className="text-gray-600 dark:text-gray-400">
+                              {distance} {unitLabel}
+                              {activity.average_cadence && ` • ${Math.round(activity.average_cadence * 2)} spm`}
+                            </div>
+                          </a>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
       <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 h-14">
         <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">

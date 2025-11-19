@@ -1,0 +1,202 @@
+import { useState, useEffect } from 'react';
+import { StravaActivity } from '../types/strava';
+
+interface CachedActivities {
+  activities: StravaActivity[];
+  lastFetched: number;
+  startDate: string;
+  endDate: string;
+}
+
+const CACHE_KEY = 'strava_activities_cache';
+const RECENT_CACHE_DURATION = 15 * 60 * 1000; // 15 minutes for recent activities
+const OLD_CACHE_DURATION = 7 * 24 * 60 * 60 * 1000; // 1 week for older activities
+
+export function useStravaActivities(startDate: Date, endDate: Date) {
+  const [activities, setActivities] = useState<StravaActivity[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    
+    async function fetchActivities() {
+      if (!isMounted) return;
+      
+      setLoading(true);
+      setError(null);
+
+      const startDateStr = startDate.toISOString().split('T')[0];
+      const endDateStr = endDate.toISOString().split('T')[0];
+
+      try {
+        // Check cache first
+        const cached = getCachedActivities();
+        if (cached && isCacheValid(cached, startDateStr, endDateStr)) {
+          console.log('Using cached activities');
+          const filtered = filterActivitiesByDateRange(cached.activities, startDate, endDate);
+          if (isMounted) {
+            setActivities(filtered);
+            setLoading(false);
+          }
+          return;
+        }
+
+        // Determine what dates we need to fetch
+        const { fetchStartDate, fetchEndDate } = determineFetchRange(
+          cached,
+          startDateStr,
+          endDateStr
+        );
+
+        console.log(`Fetching activities from ${fetchStartDate} to ${fetchEndDate}`);
+
+        // Fetch from API
+        const response = await fetch(
+          `/api/strava/activities?startDate=${fetchStartDate}&endDate=${fetchEndDate}`
+        );
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch activities from Strava');
+        }
+
+        const data = await response.json();
+        const newActivities: StravaActivity[] = data.activities || [];
+
+        // Merge with cached activities if needed
+        let allActivities = newActivities;
+        if (cached && cached.activities.length > 0) {
+          allActivities = mergeActivities(cached.activities, newActivities);
+        }
+
+        // Update cache with expanded date range
+        const cacheData: CachedActivities = {
+          activities: allActivities,
+          lastFetched: Date.now(),
+          startDate: fetchStartDate,
+          endDate: fetchEndDate,
+        };
+        localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
+
+        // Filter to requested range
+        const filtered = filterActivitiesByDateRange(allActivities, startDate, endDate);
+        if (isMounted) {
+          setActivities(filtered);
+        }
+      } catch (err) {
+        console.error('Error fetching activities:', err);
+        if (isMounted) {
+          setError(err instanceof Error ? err.message : 'Unknown error');
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    fetchActivities();
+    
+    return () => {
+      isMounted = false;
+    };
+  }, [startDate.getTime(), endDate.getTime()]);
+
+  return { activities, loading, error };
+}
+
+function getCachedActivities(): CachedActivities | null {
+  try {
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (!cached) return null;
+    return JSON.parse(cached);
+  } catch {
+    return null;
+  }
+}
+
+function isCacheValid(
+  cached: CachedActivities,
+  requestedStart: string,
+  requestedEnd: string
+): boolean {
+  const now = Date.now();
+  const cacheAge = now - cached.lastFetched;
+
+  // Determine if we're requesting recent data (within last week)
+  const oneWeekAgo = new Date();
+  oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+  const oneWeekAgoStr = oneWeekAgo.toISOString().split('T')[0];
+  
+  // If requested range includes recent activities, use shorter cache duration
+  const isRequestingRecentData = requestedEnd >= oneWeekAgoStr;
+  const cacheDuration = isRequestingRecentData ? RECENT_CACHE_DURATION : OLD_CACHE_DURATION;
+
+  // Check if cache is not expired
+  if (cacheAge > cacheDuration) {
+    console.log(`Cache expired (age: ${Math.round(cacheAge / 60000)} minutes, max: ${Math.round(cacheDuration / 60000)} minutes)`);
+    return false;
+  }
+
+  // Check if cached range covers requested range
+  const cacheCoversRange =
+    cached.startDate <= requestedStart && cached.endDate >= requestedEnd;
+
+  if (!cacheCoversRange) {
+    console.log('Cache does not cover requested date range');
+  }
+
+  return cacheCoversRange;
+}
+
+function determineFetchRange(
+  cached: CachedActivities | null,
+  requestedStart: string,
+  requestedEnd: string
+): { fetchStartDate: string; fetchEndDate: string } {
+  if (!cached) {
+    // No cache, fetch exactly what's requested
+    return { fetchStartDate: requestedStart, fetchEndDate: requestedEnd };
+  }
+
+  // Expand the range to include both cached and requested
+  const fetchStartDate =
+    requestedStart < cached.startDate ? requestedStart : cached.startDate;
+  const fetchEndDate =
+    requestedEnd > cached.endDate ? requestedEnd : cached.endDate;
+
+  return { fetchStartDate, fetchEndDate };
+}
+
+function mergeActivities(
+  cached: StravaActivity[],
+  newActivities: StravaActivity[]
+): StravaActivity[] {
+  const activityMap = new Map<number, StravaActivity>();
+
+  // Add cached activities
+  cached.forEach((activity) => {
+    activityMap.set(activity.id, activity);
+  });
+
+  // Add/override with new activities
+  newActivities.forEach((activity) => {
+    activityMap.set(activity.id, activity);
+  });
+
+  return Array.from(activityMap.values()).sort(
+    (a, b) =>
+      new Date(b.start_date).getTime() - new Date(a.start_date).getTime()
+  );
+}
+
+function filterActivitiesByDateRange(
+  activities: StravaActivity[],
+  startDate: Date,
+  endDate: Date
+): StravaActivity[] {
+  return activities.filter((activity) => {
+    const activityDate = new Date(activity.start_date);
+    return activityDate >= startDate && activityDate <= endDate;
+  });
+}

@@ -1,11 +1,31 @@
-export function getLastFullWeek(): Date {
+export type WeekStartDay = 'Sunday' | 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday';
+
+const DAY_TO_NUMBER: Record<WeekStartDay, number> = {
+  'Sunday': 0,
+  'Monday': 1,
+  'Tuesday': 2,
+  'Wednesday': 3,
+  'Thursday': 4,
+  'Friday': 5,
+  'Saturday': 6
+};
+
+export function getLastFullWeek(weekStartsOn: WeekStartDay = 'Sunday'): Date {
   const today = new Date();
   const dayOfWeek = today.getDay(); // 0 = Sunday, 6 = Saturday
-  const daysToLastSunday = dayOfWeek === 0 ? 7 : dayOfWeek;
-  const lastSunday = new Date(today);
-  lastSunday.setDate(today.getDate() - daysToLastSunday);
-  lastSunday.setHours(0, 0, 0, 0);
-  return lastSunday;
+  const startDayNum = DAY_TO_NUMBER[weekStartsOn];
+  
+  let daysToLastStart;
+  if (dayOfWeek >= startDayNum) {
+    daysToLastStart = dayOfWeek - startDayNum;
+  } else {
+    daysToLastStart = 7 - (startDayNum - dayOfWeek);
+  }
+  
+  const lastStart = new Date(today);
+  lastStart.setDate(today.getDate() - daysToLastStart - 7); // Previous complete week
+  lastStart.setHours(0, 0, 0, 0);
+  return lastStart;
 }
 
 export function getWeekStartDate(weeksBack: number, endDate: Date): Date {
@@ -20,7 +40,17 @@ export function formatWeekLabel(date: Date): string {
   return `${month} ${day}`;
 }
 
-export function formatWeekTooltip(date: Date): string {
+const DAY_ABBREVIATIONS: Record<WeekStartDay, string> = {
+  'Sunday': 'Sun',
+  'Monday': 'Mon',
+  'Tuesday': 'Tue',
+  'Wednesday': 'Wed',
+  'Thursday': 'Thu',
+  'Friday': 'Fri',
+  'Saturday': 'Sat'
+};
+
+export function formatWeekTooltip(date: Date, weekStartsOn: WeekStartDay = 'Sunday'): string {
   const startDate = new Date(date);
   const endDate = new Date(date);
   endDate.setDate(startDate.getDate() + 6);
@@ -31,10 +61,12 @@ export function formatWeekTooltip(date: Date): string {
   const endDay = endDate.getDate();
   const year = endDate.getFullYear();
   
+  const dayName = DAY_ABBREVIATIONS[weekStartsOn];
+  
   if (startMonth === endMonth) {
-    return `${startMonth} ${startDay}-${endDay}, ${year}`;
+    return `${dayName} ${startMonth} ${startDay}-${endDay}, ${year}`;
   } else {
-    return `${startMonth} ${startDay} - ${endMonth} ${endDay}, ${year}`;
+    return `${dayName} ${startMonth} ${startDay} - ${endMonth} ${endDay}, ${year}`;
   }
 }
 

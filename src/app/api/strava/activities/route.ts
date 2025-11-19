@@ -19,7 +19,12 @@ export async function GET(request: NextRequest) {
       new Date(endDate)
     );
 
-    return NextResponse.json({ activities });
+    // Filter for running activities only
+    const runActivities = activities.filter(
+      (activity) => activity.type === 'Run' || activity.type === 'VirtualRun'
+    );
+
+    return NextResponse.json({ activities: runActivities });
   } catch (error) {
     console.error('Error fetching activities:', error);
     return NextResponse.json(

@@ -4,6 +4,7 @@ import { useState, createContext, useContext } from "react";
 import Header from "./Header";
 import { UnitProvider } from "../context/UnitContext";
 import { StravaAuthProvider } from "../context/StravaAuthContext";
+import { WeekStartProvider } from "../context/WeekStartContext";
 
 const ConfigContext = createContext<{ showConfig: boolean; setShowConfig: (show: boolean) => void } | undefined>(undefined);
 
@@ -29,9 +30,11 @@ function ClientLayoutContent({ children }: { children: React.ReactNode }) {
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   return (
     <StravaAuthProvider>
-      <UnitProvider>
-        <ClientLayoutContent>{children}</ClientLayoutContent>
-      </UnitProvider>
+      <WeekStartProvider>
+        <UnitProvider>
+          <ClientLayoutContent>{children}</ClientLayoutContent>
+        </UnitProvider>
+      </WeekStartProvider>
     </StravaAuthProvider>
   );
 }
