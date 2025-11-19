@@ -114,7 +114,7 @@ export default function LongestDistanceChart({ endDate, unit }: LongestDistanceC
   if (loading) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 flex flex-col h-full">
-        <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white h-8">Longest Distance</h2>
+        <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white h-8">Longest Run</h2>
         <div className="flex-1 flex items-center justify-center">
           <div className="text-gray-500 dark:text-gray-400">Loading activities...</div>
         </div>
@@ -125,7 +125,7 @@ export default function LongestDistanceChart({ endDate, unit }: LongestDistanceC
   if (error) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 flex flex-col h-full">
-        <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white h-8">Longest Distance</h2>
+        <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white h-8">Longest Run</h2>
         <div className="flex-1 flex items-center justify-center">
           <div className="text-red-500 dark:text-red-400">{error}</div>
         </div>
@@ -140,7 +140,7 @@ export default function LongestDistanceChart({ endDate, unit }: LongestDistanceC
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 flex flex-col h-full">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold text-gray-800 dark:text-white h-8">Longest Distance</h2>
+        <h2 className="text-2xl font-bold text-gray-800 dark:text-white h-8">Longest Run</h2>
         <span className="text-xs text-gray-500 dark:text-gray-400 italic">Click bar to view activities</span>
       </div>
       <div className="space-y-3 flex-1" style={{ minHeight: '300px' }}>
@@ -252,8 +252,8 @@ export default function LongestDistanceChart({ endDate, unit }: LongestDistanceC
       </div>
       <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 h-14">
         <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
-          <span>Total: <strong className="text-gray-800 dark:text-white">{totalLongest.toFixed(1)} {unitLabelLong}</strong></span>
-          <span>Avg: <strong className="text-gray-800 dark:text-white">{avgLongest.toFixed(1)} {unitLabelLong}/week</strong></span>
+          <span>Longest: <strong className="text-gray-800 dark:text-white">{maxLongest.toFixed(1)} {unitLabel}</strong></span>
+          <span>Avg Long Run: <strong className="text-gray-800 dark:text-white">{avgLongest.toFixed(1)} {unitLabel}</strong></span>
         </div>
       </div>
     </div>

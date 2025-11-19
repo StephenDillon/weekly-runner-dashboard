@@ -56,7 +56,7 @@ export default function WeekSelector({ selectedWeek, onWeekChange }: WeekSelecto
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-4">
           <label htmlFor="week-selector" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            Select Week:
+            Select Newest Week To Display:
           </label>
           <input
             id="week-selector"
