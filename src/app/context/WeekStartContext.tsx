@@ -16,7 +16,7 @@ interface WeekStartContextType {
 const WeekStartContext = createContext<WeekStartContextType | undefined>(undefined);
 
 export function WeekStartProvider({ children }: { children: ReactNode }) {
-  const [weekStartDay, setWeekStartDayState] = useState<WeekStartDay>('Sunday');
+  const [weekStartDay, setWeekStartDayState] = useState<WeekStartDay>('Monday');
   const [weeksToDisplay, setWeeksToDisplayState] = useState<number>(8);
 
   // Load from localStorage on mount

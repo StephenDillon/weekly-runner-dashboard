@@ -10,7 +10,7 @@ const DAY_TO_NUMBER: Record<WeekStartDay, number> = {
   'Saturday': 6
 };
 
-export function getLastFullWeek(weekStartsOn: WeekStartDay = 'Sunday'): Date {
+export function getLastFullWeek(weekStartsOn: WeekStartDay = 'Monday'): Date {
   const today = new Date();
   const dayOfWeek = today.getDay(); // 0 = Sunday, 6 = Saturday
   const startDayNum = DAY_TO_NUMBER[weekStartsOn];
@@ -50,7 +50,7 @@ const DAY_ABBREVIATIONS: Record<WeekStartDay, string> = {
   'Saturday': 'Sat'
 };
 
-export function formatWeekTooltip(date: Date, weekStartsOn: WeekStartDay = 'Sunday'): string {
+export function formatWeekTooltip(date: Date, weekStartsOn: WeekStartDay = 'Monday'): string {
   const startDate = new Date(date);
   const endDate = new Date(date);
   endDate.setDate(startDate.getDate() + 6);
