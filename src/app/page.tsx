@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import WeekSelector from "./components/WeekSelector";
 import WeeklyMileageChart from "./components/WeeklyMileageChart";
@@ -11,17 +11,9 @@ import { useUnit } from "./context/UnitContext";
 import { useStravaAuth } from "./context/StravaAuthContext";
 import { useWeekStart } from "./context/WeekStartContext";
 
-export default function Home() {
-  const { weekStartDay } = useWeekStart();
-  const [selectedWeek, setSelectedWeek] = useState<Date>(getLastFullWeek(weekStartDay));
-  const { unit } = useUnit();
-  const { isAuthenticated, setIsAuthenticated, checkAuth } = useStravaAuth();
+function AuthHandler() {
   const searchParams = useSearchParams();
-
-  // Update selected week when week start day changes
-  useEffect(() => {
-    setSelectedWeek(getLastFullWeek(weekStartDay));
-  }, [weekStartDay]);
+  const { setIsAuthenticated } = useStravaAuth();
 
   useEffect(() => {
     // Check if user just completed OAuth
@@ -33,6 +25,20 @@ export default function Home() {
       window.history.replaceState({}, '', '/');
     }
   }, [searchParams, setIsAuthenticated]);
+
+  return null;
+}
+
+export default function Home() {
+  const { weekStartDay } = useWeekStart();
+  const [selectedWeek, setSelectedWeek] = useState<Date>(getLastFullWeek(weekStartDay));
+  const { unit } = useUnit();
+  const { isAuthenticated } = useStravaAuth();
+
+  // Update selected week when week start day changes
+  useEffect(() => {
+    setSelectedWeek(getLastFullWeek(weekStartDay));
+  }, [weekStartDay]);
 
   const handleConnect = async () => {
     try {
@@ -58,7 +64,9 @@ export default function Home() {
   
   return (
     <div className="min-h-screen font-sans bg-linear-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
-      
+      <Suspense fallback={null}>
+        <AuthHandler />
+      </Suspense>
       <div className="max-w-7xl mx-auto py-12 px-4">
         <WeekSelector selectedWeek={selectedWeek} onWeekChange={setSelectedWeek} />
         
