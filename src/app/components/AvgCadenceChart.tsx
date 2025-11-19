@@ -6,6 +6,7 @@ import { useStravaActivities } from '../hooks/useStravaActivities';
 import { aggregateActivitiesByWeek, generateWeekStarts, metersToMiles } from '../utils/activityAggregation';
 import { useWeekStart } from '../context/WeekStartContext';
 import { useDisabledActivities } from '../context/DisabledActivitiesContext';
+import ActivityTooltipItem from './ActivityTooltipItem';
 
 interface CadenceData {
   week: string;
@@ -172,62 +173,16 @@ export default function AvgCadenceChart({ endDate }: AvgCadenceChartProps) {
                       Click to keep open, click X to close
                     </div>
                     <div className="space-y-1 max-h-60 overflow-y-auto">
-                      {weekActivities.map((activity) => {
-                        const isDisabled = isActivityDisabled(activity.id);
-                        return (
-                          <div
-                            key={activity.id}
-                            className={`flex items-center gap-2 py-1 px-2 rounded transition-colors ${
-                              isDisabled ? 'opacity-50 bg-gray-100 dark:bg-gray-600' : 'hover:bg-gray-50 dark:hover:bg-gray-600'
-                            }`}
-                          >
-                            <button
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                toggleActivity(activity.id);
-                              }}
-                              className={`shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                                isDisabled
-                                  ? 'border-red-500 bg-red-500 text-white'
-                                  : 'border-gray-400 dark:border-gray-500 hover:border-red-500'
-                              }`}
-                              title={isDisabled ? 'Enable activity' : 'Disable activity'}
-                            >
-                              {isDisabled && (
-                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                </svg>
-                              )}
-                            </button>
-                            <div className="flex-1 text-xs">
-                              <a
-                                href={`https://www.strava.com/activities/${activity.id}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className={`block ${
-                                  isDisabled
-                                    ? 'text-gray-500 dark:text-gray-400'
-                                    : 'text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline'
-                                }`}
-                              >
-                                View on Strava
-                              </a>
-                              <div className={`${
-                                isDisabled
-                                  ? 'text-gray-500 dark:text-gray-400 line-through'
-                                  : 'text-gray-900 dark:text-gray-100'
-                              }`}>
-                                {activity.name}
-                              </div>
-                              <div className="text-gray-600 dark:text-gray-400">
-                                {metersToMiles(activity.distance).toFixed(2)} mi
-                                {activity.average_cadence && ` • ${Math.round(activity.average_cadence * 2)} spm`}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
+                      {weekActivities.map((activity) => (
+                        <ActivityTooltipItem
+                          key={activity.id}
+                          activity={activity}
+                          isDisabled={isActivityDisabled(activity.id)}
+                          onToggle={toggleActivity}
+                          distance={metersToMiles(activity.distance).toFixed(2)}
+                          unitLabel="mi"
+                        />
+                      ))}
                     </div>
                   </div>
                 )}

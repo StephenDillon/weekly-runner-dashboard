@@ -20,6 +20,15 @@ export default function Header({ onConfigToggle, showConfig }: HeaderProps) {
             <p className="text-lg text-gray-600 dark:text-gray-300">
               Track your running progress and performance metrics
             </p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+              For any feedback please email{' '}
+              <a 
+                href="mailto:weekly-runner-dashboard@proton.me"
+                className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline"
+              >
+                weekly-runner-dashboard@proton.me
+              </a>
+            </p>
           </div>
           
           <button
