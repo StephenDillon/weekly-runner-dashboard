@@ -115,8 +115,8 @@ export default function AvgCadenceChart({ endDate }: AvgCadenceChartProps) {
         <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-white">Average Cadence</h2>
         <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 italic">Tap bar to view activities</span>
       </div>
-      <div className="relative bg-gray-50 dark:bg-gray-900 rounded-lg p-4 pt-8 flex-1" style={{ minHeight: '250px' }}>
-        <div className="h-full flex items-end justify-around gap-2">
+      <div className="relative bg-gray-50 dark:bg-gray-900 rounded-lg p-2 sm:p-4 pt-6 sm:pt-8 flex-1" style={{ minHeight: '250px' }}>
+        <div className="h-full flex items-end justify-around gap-1 sm:gap-2">
           {chartData.map((data, index) => {
             const heightPercent = data.cadence && range > 0
               ? ((data.cadence - minCadence) / range) * 85 + 10
@@ -134,7 +134,7 @@ export default function AvgCadenceChart({ endDate }: AvgCadenceChartProps) {
               >
                 <div className="relative flex items-end justify-center w-full" style={{ height: `${heightPercent}%` }}>
                   {data.cadence !== null && (
-                    <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 text-[10px] sm:text-xs font-semibold text-gray-700 dark:text-gray-200 whitespace-nowrap z-10">
+                    <div className="absolute -top-4 sm:-top-6 left-1/2 transform -translate-x-1/2 text-[9px] sm:text-xs font-semibold text-gray-700 dark:text-gray-200 whitespace-nowrap z-10">
                       {Math.round(data.cadence)}
                     </div>
                   )}
@@ -144,7 +144,7 @@ export default function AvgCadenceChart({ endDate }: AvgCadenceChartProps) {
                     >
                     </div>
                   ) : (
-                    <div className="text-xs text-gray-400 dark:text-gray-500">-</div>
+                    <div className="text-[9px] sm:text-xs text-gray-400 dark:text-gray-500">-</div>
                   )}
                 </div>
                 
@@ -161,7 +161,7 @@ export default function AvgCadenceChart({ endDate }: AvgCadenceChartProps) {
                   </div>
                 )}
                 
-                <div className="text-[10px] sm:text-xs font-medium text-gray-600 dark:text-gray-300 mt-2 cursor-help text-center" title={data.weekTooltip}>
+                <div className="text-[9px] sm:text-xs font-medium text-gray-600 dark:text-gray-300 mt-1 sm:mt-2 cursor-help text-center" title={data.weekTooltip}>
                   {data.week}
                 </div>
               </div>
