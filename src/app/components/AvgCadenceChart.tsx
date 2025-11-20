@@ -121,9 +121,7 @@ export default function AvgCadenceChart({ endDate }: AvgCadenceChartProps) {
             const heightPercent = data.cadence && range > 0
               ? ((data.cadence - minCadence) / range) * 85 + 10
               : 10;
-            const weekActivities = weeklyMetrics[index]?.activities.filter(
-              a => a.average_cadence && a.average_cadence > 0
-            ) || [];
+            const weekActivities = weeklyMetrics[index]?.activities || [];
             
             return (
               <div 
@@ -136,7 +134,7 @@ export default function AvgCadenceChart({ endDate }: AvgCadenceChartProps) {
               >
                 <div className="relative flex items-end justify-center w-full" style={{ height: `${heightPercent}%` }}>
                   {data.cadence !== null && (
-                    <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 text-xs font-semibold text-gray-700 dark:text-gray-200 whitespace-nowrap z-10">
+                    <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 text-[10px] sm:text-xs font-semibold text-gray-700 dark:text-gray-200 whitespace-nowrap z-10">
                       {Math.round(data.cadence)}
                     </div>
                   )}
@@ -163,7 +161,7 @@ export default function AvgCadenceChart({ endDate }: AvgCadenceChartProps) {
                   </div>
                 )}
                 
-                <div className="text-xs font-medium text-gray-600 dark:text-gray-300 mt-2 cursor-help" title={data.weekTooltip}>
+                <div className="text-[10px] sm:text-xs font-medium text-gray-600 dark:text-gray-300 mt-2 cursor-help text-center" title={data.weekTooltip}>
                   {data.week}
                 </div>
               </div>
