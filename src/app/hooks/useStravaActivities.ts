@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { StravaActivity } from '../types/strava';
 import { useStravaAuth } from '../context/StravaAuthContext';
+import { useActivityType } from '../context/ActivityTypeContext';
 
 interface CachedActivities {
   activities: StravaActivity[];
@@ -18,6 +19,7 @@ export function useStravaActivities(startDate: Date, endDate: Date) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { setIsAuthenticated } = useStravaAuth();
+  const { activityType } = useActivityType();
 
   useEffect(() => {
     let isMounted = true;
@@ -37,8 +39,9 @@ export function useStravaActivities(startDate: Date, endDate: Date) {
         if (cached && isCacheValid(cached, startDateStr, endDateStr)) {
           console.log('Using cached activities');
           const filtered = filterActivitiesByDateRange(cached.activities, startDate, endDate);
+          const typeFiltered = filterByActivityType(filtered, activityType);
           if (isMounted) {
-            setActivities(filtered);
+            setActivities(typeFiltered);
             setLoading(false);
           }
           return;
@@ -86,10 +89,11 @@ export function useStravaActivities(startDate: Date, endDate: Date) {
         };
         localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
 
-        // Filter to requested range
+        // Filter to requested range and activity type
         const filtered = filterActivitiesByDateRange(allActivities, startDate, endDate);
+        const typeFiltered = filterByActivityType(filtered, activityType);
         if (isMounted) {
-          setActivities(filtered);
+          setActivities(typeFiltered);
         }
       } catch (err) {
         console.error('Error fetching activities:', err);
@@ -108,7 +112,7 @@ export function useStravaActivities(startDate: Date, endDate: Date) {
     return () => {
       isMounted = false;
     };
-  }, [startDate.getTime(), endDate.getTime()]);
+  }, [startDate.getTime(), endDate.getTime(), activityType]);
 
   return { activities, loading, error };
 }
@@ -207,4 +211,20 @@ function filterActivitiesByDateRange(
     const activityDate = new Date(activity.start_date);
     return activityDate >= startDate && activityDate <= endDate;
   });
+}
+
+function filterByActivityType(
+  activities: StravaActivity[],
+  activityType: 'running' | 'cycling'
+): StravaActivity[] {
+  let filtered: StravaActivity[];
+  if (activityType === 'running') {
+    filtered = activities.filter((activity) => activity.type === 'Run');
+  } else {
+    // Cycling can have multiple types: Ride, VirtualRide, EBikeRide, etc.
+    const cyclingTypes = ['Ride', 'VirtualRide', 'EBikeRide', 'Handcycle', 'GravelRide'];
+    filtered = activities.filter((activity) => cyclingTypes.includes(activity.type));
+  }
+  
+  return filtered;
 }

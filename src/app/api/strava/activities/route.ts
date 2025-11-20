@@ -19,12 +19,8 @@ export async function GET(request: NextRequest) {
       new Date(endDate)
     );
 
-    // Filter for running activities only
-    const runActivities = activities.filter(
-      (activity) => activity.type === 'Run' || activity.type === 'VirtualRun'
-    );
-
-    const response = NextResponse.json({ activities: runActivities });
+    // Return all activities - filtering will be done on the client side
+    const response = NextResponse.json({ activities });
     
     // Cache for 7 days (604800 seconds)
     response.headers.set('Cache-Control', 'public, max-age=604800, s-maxage=604800');

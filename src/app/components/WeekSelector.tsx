@@ -3,6 +3,7 @@
 import React from 'react';
 import { useUnit } from '../context/UnitContext';
 import { useWeekStart, DAYS_OF_WEEK } from '../context/WeekStartContext';
+import { useActivityType } from '../context/ActivityTypeContext';
 import { useConfig } from './ClientLayout';
 
 interface WeekSelectorProps {
@@ -13,6 +14,7 @@ interface WeekSelectorProps {
 export default function WeekSelector({ selectedWeek, onWeekChange }: WeekSelectorProps) {
   const { unit, setUnit } = useUnit();
   const { weekStartDay, setWeekStartDay, weeksToDisplay, setWeeksToDisplay } = useWeekStart();
+  const { activityType, setActivityType } = useActivityType();
   const { showConfig } = useConfig();
   
   const formatDate = (date: Date) => {
@@ -103,6 +105,34 @@ export default function WeekSelector({ selectedWeek, onWeekChange }: WeekSelecto
             }}
             className="w-full sm:w-20 px-3 sm:px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
           />
+        </div>
+
+        <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700 w-full sm:w-auto">
+          <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Activity Type
+          </label>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setActivityType('running')}
+              className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors ${
+                activityType === 'running'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600'
+              }`}
+            >
+              Running
+            </button>
+            <button
+              onClick={() => setActivityType('cycling')}
+              className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors ${
+                activityType === 'cycling'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600'
+              }`}
+            >
+              Cycling
+            </button>
+          </div>
         </div>
 
         <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700 w-full sm:w-auto">

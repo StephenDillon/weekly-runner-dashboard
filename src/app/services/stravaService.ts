@@ -167,7 +167,8 @@ export class StravaService {
       }
     }
 
-    return activities.filter((a) => a.type === 'Run');
+    // Return all activities - filtering will be done on the client side
+    return activities;
   }
 
   /**

@@ -6,6 +6,7 @@ import { useStravaActivities } from '../hooks/useStravaActivities';
 import { generateWeekStarts, metersToMiles } from '../utils/activityAggregation';
 import { useWeekStart } from '../context/WeekStartContext';
 import { useDisabledActivities } from '../context/DisabledActivitiesContext';
+import { useActivityType } from '../context/ActivityTypeContext';
 import { StravaActivity } from '../types/strava';
 import ActivityTooltipItem from './ActivityTooltipItem';
 import WeekActivitiesTooltip from './WeekActivitiesTooltip';
@@ -26,6 +27,7 @@ const milesToKm = (miles: number) => miles * 1.60934;
 export default function LongestDistanceChart({ endDate, unit }: LongestDistanceChartProps) {
   const { weekStartDay, weeksToDisplay } = useWeekStart();
   const { disabledActivities, toggleActivity, isActivityDisabled } = useDisabledActivities();
+  const { activityType } = useActivityType();
   const weeks = getWeeksBack(weeksToDisplay, endDate);
   const [hoveredWeek, setHoveredWeek] = useState<number | null>(null);
   const [lockedWeek, setLockedWeek] = useState<number | null>(null);
@@ -140,13 +142,17 @@ export default function LongestDistanceChart({ endDate, unit }: LongestDistanceC
   }
 
   const totalLongest = convertedData.reduce((sum, d) => sum + d.distance, 0);
-  const avgLongest = totalLongest / convertedData.length;
+  const weeksWithActivities = convertedData.filter(d => d.distance > 0);
+  const avgLongest = weeksWithActivities.length > 0 
+    ? weeksWithActivities.reduce((sum, d) => sum + d.distance, 0) / weeksWithActivities.length
+    : 0;
   const maxLongest = Math.max(...convertedData.map(d => d.distance));
+  const activityLabel = activityType === 'running' ? 'Run' : 'Ride';
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 sm:p-6 flex flex-col h-full">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-3 sm:mb-4 gap-1 sm:gap-0">
-        <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-white">Longest Run</h2>
+        <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-white">Longest {activityLabel}</h2>
         <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 italic">Tap bar to view activities</span>
       </div>
       <div className="space-y-2 sm:space-y-3 flex-1" style={{ minHeight: '250px' }}>
@@ -194,7 +200,7 @@ export default function LongestDistanceChart({ endDate, unit }: LongestDistanceC
       <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-gray-200 dark:border-gray-700 min-h-12 sm:min-h-14">
         <div className="flex flex-col sm:flex-row justify-between gap-1 sm:gap-0 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
           <span>Longest: <strong className="text-gray-800 dark:text-white">{maxLongest.toFixed(1)} {unitLabel}</strong></span>
-          <span>Avg Long Run: <strong className="text-gray-800 dark:text-white">{avgLongest.toFixed(1)} {unitLabel}</strong></span>
+          <span>Avg Long {activityLabel}: <strong className="text-gray-800 dark:text-white">{avgLongest.toFixed(1)} {unitLabel}</strong></span>
         </div>
       </div>
     </div>

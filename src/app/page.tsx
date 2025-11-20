@@ -10,12 +10,14 @@ import { getLastFullWeek } from "./utils/dateUtils";
 import { useUnit } from "./context/UnitContext";
 import { useStravaAuth } from "./context/StravaAuthContext";
 import { useWeekStart } from "./context/WeekStartContext";
+import { useActivityType } from "./context/ActivityTypeContext";
 
 export default function Home() {
   const { weekStartDay } = useWeekStart();
   const [selectedWeek, setSelectedWeek] = useState<Date>(getLastFullWeek(weekStartDay));
   const { unit } = useUnit();
   const { isAuthenticated, setIsAuthenticated } = useStravaAuth();
+  const { activityType } = useActivityType();
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
   // Check for auth success in URL on mount
@@ -79,9 +81,11 @@ export default function Home() {
           <LongestDistanceChart endDate={selectedWeek} unit={unit} />
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:gap-6 md:gap-8 mb-4 sm:mb-6 md:mb-8">
-          <AvgCadenceChart endDate={selectedWeek} />
-        </div>
+        {activityType === 'running' && (
+          <div className="grid grid-cols-1 gap-4 sm:gap-6 md:gap-8 mb-4 sm:mb-6 md:mb-8">
+            <AvgCadenceChart endDate={selectedWeek} />
+          </div>
+        )}
       </div>
     </div>
   );

@@ -6,6 +6,7 @@ import { useStravaActivities } from '../hooks/useStravaActivities';
 import { aggregateActivitiesByWeek, generateWeekStarts, milesToKilometers, metersToMiles } from '../utils/activityAggregation';
 import { useWeekStart } from '../context/WeekStartContext';
 import { useDisabledActivities } from '../context/DisabledActivitiesContext';
+import { useActivityType } from '../context/ActivityTypeContext';
 import { StravaActivity } from '../types/strava';
 import ActivityTooltipItem from './ActivityTooltipItem';
 import WeekActivitiesTooltip from './WeekActivitiesTooltip';
@@ -26,6 +27,7 @@ const milesToKm = (miles: number) => miles * 1.60934;
 export default function WeeklyMileageChart({ endDate, unit }: WeeklyMileageChartProps) {
   const { weekStartDay, weeksToDisplay } = useWeekStart();
   const { disabledActivities, toggleActivity, isActivityDisabled } = useDisabledActivities();
+  const { activityType } = useActivityType();
   const weeks = getWeeksBack(weeksToDisplay, endDate);
   const [hoveredWeek, setHoveredWeek] = useState<number | null>(null);
   const [lockedWeek, setLockedWeek] = useState<number | null>(null);
@@ -165,7 +167,13 @@ export default function WeeklyMileageChart({ endDate, unit }: WeeklyMileageChart
       <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-gray-200 dark:border-gray-700 min-h-12 sm:min-h-14">
         <div className="flex flex-col sm:flex-row justify-between gap-1 sm:gap-0 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
           <span>Total: <strong className="text-gray-800 dark:text-white">{convertedData.reduce((sum, d) => sum + d.distance, 0).toFixed(1)} {unitLabelLong}</strong></span>
-          <span>Avg: <strong className="text-gray-800 dark:text-white">{(convertedData.reduce((sum, d) => sum + d.distance, 0) / convertedData.length).toFixed(1)} {unitLabelLong}/week</strong></span>
+          <span>Avg: <strong className="text-gray-800 dark:text-white">{(() => {
+            const weeksWithActivities = convertedData.filter(d => d.distance > 0);
+            const avg = weeksWithActivities.length > 0 
+              ? weeksWithActivities.reduce((sum, d) => sum + d.distance, 0) / weeksWithActivities.length
+              : 0;
+            return avg.toFixed(1);
+          })()} {unitLabelLong}/week</strong></span>
         </div>
       </div>
     </div>
