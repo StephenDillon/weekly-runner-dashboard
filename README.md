@@ -48,7 +48,7 @@ cp .env.example .env.local
 ```env
 NEXT_PUBLIC_STRAVA_CLIENT_ID=your_client_id
 STRAVA_CLIENT_SECRET=your_client_secret
-NEXT_PUBLIC_STRAVA_REDIRECT_URI=http://localhost:3000/api/auth/callback
+NEXT_PUBLIC_STRAVA_REDIRECT_URI=http://localhost:3000/api/v1/auth/callback
 NEXTAUTH_SECRET=your_random_secret
 ```
 

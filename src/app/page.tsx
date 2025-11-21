@@ -42,7 +42,7 @@ export default function Home() {
 
   const handleConnect = async () => {
     try {
-      const response = await fetch('/api/auth/login');
+      const response = await fetch('/api/v1/auth/login');
       const data = await response.json();
       if (data.authUrl) {
         window.location.href = data.authUrl;

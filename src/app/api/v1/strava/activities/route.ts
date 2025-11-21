@@ -22,8 +22,9 @@ export async function GET(request: NextRequest) {
     // Return all activities - filtering will be done on the client side
     const response = NextResponse.json({ activities });
     
-    // Cache for 7 days (604800 seconds)
-    response.headers.set('Cache-Control', 'public, max-age=604800, s-maxage=604800');
+    // Cache for 15 minutes, allow stale data for 1 day while revalidating in background
+    // This provides instant responses while keeping data relatively fresh
+    response.headers.set('Cache-Control', 'public, max-age=900, stale-while-revalidate=86400');
     
     return response;
   } catch (error) {
