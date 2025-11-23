@@ -351,7 +351,7 @@ export default function DistanceAnalysisChart({ endDate, unit }: DistanceAnalysi
               )}
               
               {/* X-axis labels - Show week labels only */}
-              <div className="absolute inset-x-0 bottom-0 h-20">
+              <div className="absolute inset-x-0 bottom-0">
                 {weekLabels.map((label) => {
                   const xPercent = ((label.index / Math.max(distanceData.length - 1, 1)) * 90) + 5;
                   

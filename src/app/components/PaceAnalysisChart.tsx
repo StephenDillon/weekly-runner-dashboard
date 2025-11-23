@@ -350,7 +350,7 @@ export default function PaceAnalysisChart({ endDate, unit }: PaceAnalysisChartPr
               )}
               
               {/* X-axis labels */}
-              <div className="absolute inset-x-0 bottom-0 h-20">
+              <div className="absolute inset-x-0 bottom-0">
                 {paceData.map((data, index) => {
                   const xPercent = ((index / Math.max(paceData.length - 1, 1)) * 90) + 5;
                   
