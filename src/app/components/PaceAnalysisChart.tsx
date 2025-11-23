@@ -378,22 +378,22 @@ export default function PaceAnalysisChart({ endDate, unit }: PaceAnalysisChartPr
           <div className="text-center">
             <div className="text-sm text-gray-500 dark:text-gray-400">Fastest Pace</div>
             <div className="text-xl font-bold text-green-600 dark:text-green-400">
-              {formatPace(sortedActivities[0]?.average_speed || 0, unit)}
+              {paceData.length > 0 ? formatPace(Math.max(...sortedActivities.map(a => a.average_speed)), unit) : 'N/A'}
             </div>
           </div>
           <div className="text-center">
             <div className="text-sm text-gray-500 dark:text-gray-400">Slowest Pace</div>
             <div className="text-xl font-bold text-orange-600 dark:text-orange-400">
-              {formatPace(sortedActivities[sortedActivities.length - 1]?.average_speed || 0, unit)}
+              {paceData.length > 0 ? formatPace(Math.min(...sortedActivities.map(a => a.average_speed)), unit) : 'N/A'}
             </div>
           </div>
           <div className="text-center">
             <div className="text-sm text-gray-500 dark:text-gray-400">Avg Pace</div>
             <div className="text-xl font-bold text-blue-600 dark:text-blue-400">
-              {(() => {
+              {paceData.length > 0 ? (() => {
                 const avgSpeed = sortedActivities.reduce((sum, a) => sum + a.average_speed, 0) / sortedActivities.length;
                 return formatPace(avgSpeed, unit);
-              })()}
+              })() : 'N/A'}
             </div>
           </div>
           <div className="text-center">
