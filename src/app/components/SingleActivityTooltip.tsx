@@ -34,19 +34,12 @@ export default function SingleActivityTooltip({
           e.stopPropagation();
           onClose();
         }}
-        className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors"
-        title="Close"
+        className="absolute top-1 right-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
         </svg>
       </button>
-      <div className="text-xs font-semibold text-gray-700 dark:text-gray-200 mb-1">
-        Activity Details:
-      </div>
-      <div className="text-[10px] text-gray-500 dark:text-gray-400 mb-2 italic">
-        Click to keep open, click X to close
-      </div>
 
       <ActivityTooltipItem
         activity={activity}
