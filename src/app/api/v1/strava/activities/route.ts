@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { stravaService } from '@/app/services/stravaService';
+import { stravaService } from '@/app/lib/stravaService';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;

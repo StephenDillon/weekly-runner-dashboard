@@ -1,9 +1,9 @@
-import { StravaActivity, StravaTokenResponse } from '../types/strava';
+import { StravaTokenResponse } from '../types/strava';
 
 const STRAVA_API_BASE = 'https://www.strava.com/api/v3';
 const STRAVA_AUTH_BASE = 'https://www.strava.com/oauth';
 
-export class StravaService {
+export class StravaClient {
   private accessToken: string | null = null;
   private refreshToken: string | null = null;
   private expiresAt: number | null = null;
@@ -106,92 +106,77 @@ export class StravaService {
   }
 
   /**
-   * Get athlete activities
+   * Centralized fetch method that handles token refresh on 401 errors
    */
-  async getActivities(
-    before?: number,
-    after?: number,
-    page: number = 1,
-    perPage: number = 30
-  ): Promise<StravaActivity[]> {
+  async fetchFromStrava<T>(
+    endpoint: string,
+    params?: URLSearchParams
+  ): Promise<T> {
     const token = await this.ensureValidToken();
 
-    const params = new URLSearchParams({
-      page: page.toString(),
-      per_page: perPage.toString(),
+    const url = params 
+      ? `${STRAVA_API_BASE}${endpoint}?${params.toString()}`
+      : `${STRAVA_API_BASE}${endpoint}`;
+
+    let response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
     });
 
-    if (before) params.append('before', before.toString());
-    if (after) params.append('after', after.toString());
-
-    const response = await fetch(
-      `${STRAVA_API_BASE}/athlete/activities?${params.toString()}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+    // Handle 401 - check if it's an invalid token error
+    if (response.status === 401) {
+      try {
+        const errorData = await response.json();
+        
+        // Check if it matches the specific authorization error format
+        if (
+          errorData.message === "Authorization Error" &&
+          errorData.errors?.[0]?.field === "access_token" &&
+          errorData.errors?.[0]?.code === "invalid"
+        ) {
+          console.log('Access token invalid, refreshing...');
+          
+          // Refresh the token and retry
+          await this.refreshAccessToken();
+          const newToken = await this.ensureValidToken();
+          
+          response = await fetch(url, {
+            headers: {
+              Authorization: `Bearer ${newToken}`,
+            },
+          });
+          
+          // Check if retry was successful
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`Failed to fetch ${endpoint} after token refresh:`, response.status, errorText);
+            throw new Error(`Failed to fetch ${endpoint}`);
+          }
+          
+          return await response.json();
+        }
+      } catch (parseError) {
+        // If we can't parse the error, just throw a generic error
+        console.error(`401 error on ${endpoint}, could not parse error response`);
+        throw new Error(`Unauthorized: Failed to fetch ${endpoint}`);
       }
-    );
+    }
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Failed to fetch activities:', response.status, errorText);
-      throw new Error('Failed to fetch activities');
+      let errorText = 'Unknown error';
+      try {
+        errorText = await response.text();
+      } catch (e) {
+        // ignore if we can't read the error text
+      }
+      console.error(`Failed to fetch ${endpoint}:`, response.status, errorText);
+      throw new Error(`Failed to fetch ${endpoint}`);
     }
 
     return await response.json();
   }
 
-  /**
-   * Get activities within a date range
-   */
-  async getActivitiesInDateRange(
-    startDate: Date,
-    endDate: Date
-  ): Promise<StravaActivity[]> {
-    const after = Math.floor(startDate.getTime() / 1000);
-    const before = Math.floor(endDate.getTime() / 1000);
-
-    const activities: StravaActivity[] = [];
-    let page = 1;
-    let hasMore = true;
-
-    while (hasMore) {
-      const batch = await this.getActivities(before, after, page, 200);
-      activities.push(...batch);
-
-      if (batch.length < 200) {
-        hasMore = false;
-      } else {
-        page++;
-      }
-    }
-
-    // Return all activities - filtering will be done on the client side
-    return activities;
-  }
-
-  /**
-   * Get athlete stats
-   */
-  async getAthleteStats(athleteId: number) {
-    const token = await this.ensureValidToken();
-
-    const response = await fetch(
-      `${STRAVA_API_BASE}/athletes/${athleteId}/stats`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch athlete stats');
-    }
-
-    return await response.json();
-  }
 }
 
-export const stravaService = new StravaService();
+export const stravaClient = new StravaClient();

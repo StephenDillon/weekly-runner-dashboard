@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { stravaService } from '@/app/services/stravaService';
+import { stravaClient } from '@/app/lib/stravaClient';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const tokenData = await stravaService.exchangeToken(code);
+    const tokenData = await stravaClient.exchangeToken(code);
 
     // In a production app, you'd store these tokens securely (database, secure cookie, etc.)
     // For now, we'll return them to be stored client-side or in session
