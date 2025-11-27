@@ -2,11 +2,10 @@
 
 import React, { useMemo, useState, useRef } from 'react';
 import { getWeeksBack, formatWeekLabel, formatWeekTooltip } from '../utils/dateUtils';
-import { useStravaActivities } from '../hooks/useStravaActivities';
+import { useActivitiesWithZones } from '../hooks/useActivitiesWithZones';
 import { generateWeekStarts, metersToMiles } from '../utils/activityAggregation';
 import { useWeekStart } from '../context/WeekStartContext';
 import { useDisabledActivities } from '../context/DisabledActivitiesContext';
-import { useHeartRateZones } from '../context/HeartRateZonesContext';
 
 interface WeekData {
   week: string;
@@ -16,6 +15,11 @@ interface WeekData {
   totalMiles: number;
   easyPercent: number;
   hardPercent: number;
+  zone1Time: number;
+  zone2Time: number;
+  zone3Time: number;
+  zone4Time: number;
+  zone5Time: number;
 }
 
 interface EightyTwentyChartProps {
@@ -25,10 +29,23 @@ interface EightyTwentyChartProps {
 
 const milesToKm = (miles: number) => miles * 1.60934;
 
+function formatTimeReadable(seconds: number): string {
+  if (seconds === 0 || !isFinite(seconds)) return '0 sec';
+  const hours = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  const secs = Math.round(seconds % 60);
+  
+  const parts = [];
+  if (hours > 0) parts.push(`${hours} hour${hours !== 1 ? 's' : ''}`);
+  if (mins > 0) parts.push(`${mins} min`);
+  if (secs > 0 || parts.length === 0) parts.push(`${secs} sec`);
+  
+  return parts.join(', ');
+}
+
 export default function EightyTwentyChart({ endDate, unit }: EightyTwentyChartProps) {
   const { weekStartDay, weeksToDisplay } = useWeekStart();
   const { disabledActivities } = useDisabledActivities();
-  const { zones, maxHeartRate } = useHeartRateZones();
   const weeks = getWeeksBack(weeksToDisplay, endDate);
   const [hoveredWeek, setHoveredWeek] = useState<number | null>(null);
   
@@ -45,7 +62,7 @@ export default function EightyTwentyChart({ endDate, unit }: EightyTwentyChartPr
     return end;
   }, [endDate]);
 
-  const { activities, loading, error } = useStravaActivities(startDate, apiEndDate);
+  const { activities, loading, error } = useActivitiesWithZones(startDate, apiEndDate);
 
   const weeklyData = useMemo(() => {
     const weekStarts = generateWeekStarts(endDate, weeksToDisplay);
@@ -65,32 +82,40 @@ export default function EightyTwentyChart({ endDate, unit }: EightyTwentyChartPr
 
       let easyMiles = 0;
       let hardMiles = 0;
+      let zone1Time = 0;
+      let zone2Time = 0;
+      let zone3Time = 0;
+      let zone4Time = 0;
+      let zone5Time = 0;
 
-      // Calculate easy (zones 1-2) vs hard (zones 3-5) miles
+      // Calculate easy (zones 1-2) vs hard (zones 3-5) miles based on actual zone distribution
       enabledActivities.forEach((activity) => {
-        if (!activity.average_heartrate || activity.average_heartrate <= 0) {
-          return; // Skip activities without HR data
-        }
-
         const distanceMiles = metersToMiles(activity.distance);
-        const avgHR = activity.average_heartrate;
-
-        // Determine which zone this activity falls into based on avg HR
-        let activityZone = 1; // default to zone 1
-        for (const zone of zones) {
-          const minHR = (zone.minPercent / 100) * maxHeartRate;
-          const maxHR = (zone.maxPercent / 100) * maxHeartRate;
-          if (avgHR >= minHR && avgHR <= maxHR) {
-            activityZone = zone.zone;
-            break;
-          }
+        
+        // Get heart rate zone distribution from Strava
+        const hrZoneData = activity.zones?.find((z: any) => z.type === "heartrate")?.distribution_buckets || [];
+        
+        if (hrZoneData.length === 0 || activity.moving_time === 0) {
+          // No zone data available, skip this activity
+          return;
         }
 
-        // Zones 1-2 are "easy" (80%), zones 3-5 are "hard" (20%)
-        if (activityZone <= 2) {
-          easyMiles += distanceMiles;
-        } else {
-          hardMiles += distanceMiles;
+        // Accumulate time in each zone
+        zone1Time += hrZoneData[0]?.time || 0;
+        zone2Time += hrZoneData[1]?.time || 0;
+        zone3Time += hrZoneData[2]?.time || 0;
+        zone4Time += hrZoneData[3]?.time || 0;
+        zone5Time += hrZoneData[4]?.time || 0;
+
+        // Calculate time spent in easy zones (1-2) vs hard zones (3-5)
+        const easyTime = (hrZoneData[0]?.time || 0) + (hrZoneData[1]?.time || 0);
+        const hardTime = (hrZoneData[2]?.time || 0) + (hrZoneData[3]?.time || 0) + (hrZoneData[4]?.time || 0);
+        const totalTime = activity.moving_time;
+
+        // Distribute distance proportionally based on time in each category
+        if (totalTime > 0) {
+          easyMiles += distanceMiles * (easyTime / totalTime);
+          hardMiles += distanceMiles * (hardTime / totalTime);
         }
       });
 
@@ -105,9 +130,14 @@ export default function EightyTwentyChart({ endDate, unit }: EightyTwentyChartPr
         totalMiles,
         easyPercent,
         hardPercent,
+        zone1Time,
+        zone2Time,
+        zone3Time,
+        zone4Time,
+        zone5Time,
       };
     });
-  }, [activities, endDate, disabledActivities, weeksToDisplay, zones, maxHeartRate]);
+  }, [activities, endDate, disabledActivities, weeksToDisplay]);
 
   const convertedData = useMemo(() => {
     const data = weeks.map((date, index) => ({
@@ -125,6 +155,11 @@ export default function EightyTwentyChart({ endDate, unit }: EightyTwentyChartPr
         : (weeklyData[index]?.totalMiles || 0),
       easyPercent: weeklyData[index]?.easyPercent || 0,
       hardPercent: weeklyData[index]?.hardPercent || 0,
+      zone1Time: weeklyData[index]?.zone1Time || 0,
+      zone2Time: weeklyData[index]?.zone2Time || 0,
+      zone3Time: weeklyData[index]?.zone3Time || 0,
+      zone4Time: weeklyData[index]?.zone4Time || 0,
+      zone5Time: weeklyData[index]?.zone5Time || 0,
     }));
     // Reverse to show newest first
     return data.reverse();
@@ -137,8 +172,24 @@ export default function EightyTwentyChart({ endDate, unit }: EightyTwentyChartPr
   const totalEasy = convertedData.reduce((sum, d) => sum + d.easyMiles, 0);
   const totalHard = convertedData.reduce((sum, d) => sum + d.hardMiles, 0);
   const total = totalEasy + totalHard;
-  const overallEasyPercent = total > 0 ? (totalEasy / total) * 100 : 0;
-  const overallHardPercent = total > 0 ? (totalHard / total) * 100 : 0;
+  
+  // Calculate total time in each zone across all weeks
+  const totalZone1Time = convertedData.reduce((sum, d) => sum + d.zone1Time, 0);
+  const totalZone2Time = convertedData.reduce((sum, d) => sum + d.zone2Time, 0);
+  const totalZone3Time = convertedData.reduce((sum, d) => sum + d.zone3Time, 0);
+  const totalZone4Time = convertedData.reduce((sum, d) => sum + d.zone4Time, 0);
+  const totalZone5Time = convertedData.reduce((sum, d) => sum + d.zone5Time, 0);
+  
+  const totalEasyTime = totalZone1Time + totalZone2Time;
+  const totalHardTime = totalZone3Time + totalZone4Time + totalZone5Time;
+  const totalTime = totalEasyTime + totalHardTime;
+  
+  // Calculate percentages based on TIME (not distance) to match the displayed totals
+  const overallEasyPercent = totalTime > 0 ? (totalEasyTime / totalTime) * 100 : 0;
+  const overallHardPercent = totalTime > 0 ? (totalHardTime / totalTime) * 100 : 0;
+  
+  const easyTooltip = `Zone 1: ${formatTimeReadable(totalZone1Time)}\nZone 2: ${formatTimeReadable(totalZone2Time)}`;
+  const hardTooltip = `Zone 3: ${formatTimeReadable(totalZone3Time)}\nZone 4: ${formatTimeReadable(totalZone4Time)}\nZone 5: ${formatTimeReadable(totalZone5Time)}`;
   
   if (loading) {
     return (
@@ -169,14 +220,8 @@ export default function EightyTwentyChart({ endDate, unit }: EightyTwentyChartPr
         <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">
           The 80/20 rule suggests that 80% of your training volume should be at low intensity (Easy - Zones 1-2) and 20% at moderate to high intensity (Hard - Zones 3-5). This approach helps build aerobic base, prevents overtraining, and allows for proper recovery while still incorporating necessary high-intensity work for performance gains.
         </p>
-        <p className="text-xs text-gray-600 dark:text-gray-400 italic mb-1">
-          Based on average heart rate for each activity. Zones 1-2 (Easy) should be ~80%, Zones 3-5 (Hard) should be ~20%. 
-        </p>
-        <p className="text-xs text-gray-600 dark:text-gray-400 italic mb-1">
-            Using average HR per workout may not be fully accurate for workouts with varied intensities. Planned improvements will be to analyze HR data points within each activity.
-        </p>
         <p className="text-xs text-gray-600 dark:text-gray-400 italic">
-          Zones are set by default using the max heart rate found in your activities and can be adjusted in the config section (gear icon). This chart can be disabled by unchecking Heart Rate Zones in config.
+          Based on actual time spent in each heart rate zone from Strava. Distance is distributed proportionally based on time in easy zones (1-2) vs hard zones (3-5). Activities without zone data are excluded.
         </p>
       </div>
       <div className="space-y-2 sm:space-y-3 flex-1" style={{ minHeight: '250px' }}>
@@ -189,6 +234,9 @@ export default function EightyTwentyChart({ endDate, unit }: EightyTwentyChartPr
           weekEnd.setDate(weekEnd.getDate() + 7);
           const isCurrentWeek = now >= data.weekStartDate && now < weekEnd;
           
+          // Build tooltip with zone times
+          const zoneTooltip = `Zone 1: ${formatTimeReadable(data.zone1Time)}\nZone 2: ${formatTimeReadable(data.zone2Time)}\nZone 3: ${formatTimeReadable(data.zone3Time)}\nZone 4: ${formatTimeReadable(data.zone4Time)}\nZone 5: ${formatTimeReadable(data.zone5Time)}`;
+          
           return (
             <div key={index} className="flex items-center gap-2 sm:gap-3 relative">
               <div className={`w-12 sm:w-20 text-[10px] sm:text-sm font-medium text-gray-600 dark:text-gray-300 cursor-help ${isCurrentWeek ? 'font-bold' : ''}`} title={data.weekTooltip}>
@@ -198,6 +246,7 @@ export default function EightyTwentyChart({ endDate, unit }: EightyTwentyChartPr
                 className="flex-1 relative h-6 sm:h-8 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700"
                 onMouseEnter={() => setHoveredWeek(index)}
                 onMouseLeave={() => setHoveredWeek(null)}
+                title={zoneTooltip}
               >
                 {data.totalMiles > 0 ? (
                   <div className="h-full flex relative">
@@ -265,13 +314,23 @@ export default function EightyTwentyChart({ endDate, unit }: EightyTwentyChartPr
       <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-gray-200 dark:border-gray-700 min-h-12 sm:min-h-14">
         <div className="flex flex-col sm:flex-row justify-between gap-2 sm:gap-0 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
           <div className="flex items-center gap-4">
-            <span className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-green-500 rounded"></div>
-              <strong className="text-gray-800 dark:text-white">Easy: {overallEasyPercent.toFixed(1)}%</strong>
+            <span className="flex flex-col cursor-help" title={easyTooltip}>
+              <span className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-green-500 rounded"></div>
+                <strong className="text-gray-800 dark:text-white">Easy: {overallEasyPercent.toFixed(1)}%</strong>
+              </span>
+              <span className="text-[10px] ml-5 text-gray-500 dark:text-gray-500">
+                {formatTimeReadable(totalEasyTime)}
+              </span>
             </span>
-            <span className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-red-500 rounded"></div>
-              <strong className="text-gray-800 dark:text-white">Hard: {overallHardPercent.toFixed(1)}%</strong>
+            <span className="flex flex-col cursor-help" title={hardTooltip}>
+              <span className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-red-500 rounded"></div>
+                <strong className="text-gray-800 dark:text-white">Hard: {overallHardPercent.toFixed(1)}%</strong>
+              </span>
+              <span className="text-[10px] ml-5 text-gray-500 dark:text-gray-500">
+                {formatTimeReadable(totalHardTime)}
+              </span>
             </span>
           </div>
           <span>
