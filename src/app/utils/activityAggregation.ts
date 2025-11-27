@@ -42,7 +42,6 @@ export function aggregateActivitiesByWeek(
     );
 
     // Calculate average cadence (only for activities that have cadence data)
-    // Note: Strava returns cadence as "strides per minute" for runs, multiply by 2 for steps per minute
     const activitiesWithCadence = enabledActivities.filter(
       (a) => a.average_cadence !== undefined && a.average_cadence !== null && a.average_cadence > 0
     );

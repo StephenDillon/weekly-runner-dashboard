@@ -163,11 +163,17 @@ export default function EightyTwentyChart({ endDate, unit }: EightyTwentyChartPr
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 sm:p-6 flex flex-col h-full">
       <div className="mb-3">
         <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-white mb-2">80/20 Training Distribution</h2>
-        <p className="text-xs text-gray-600 dark:text-gray-400 italic">
+        <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">
+          The 80/20 rule suggests that 80% of your training volume should be at low intensity (Easy - Zones 1-2) and 20% at moderate to high intensity (Hard - Zones 3-5). This approach helps build aerobic base, prevents overtraining, and allows for proper recovery while still incorporating necessary high-intensity work for performance gains.
+        </p>
+        <p className="text-xs text-gray-600 dark:text-gray-400 italic mb-1">
           Based on average heart rate for each activity. Zones 1-2 (Easy) should be ~80%, Zones 3-5 (Hard) should be ~20%. 
         </p>
+        <p className="text-xs text-gray-600 dark:text-gray-400 italic mb-1">
+            Using average HR per workout may not be fully accurate for workouts with varied intensities. Planned improvements will be to analyze HR data points within each activity.
+        </p>
         <p className="text-xs text-gray-600 dark:text-gray-400 italic">
-            Note: Using average HR per workout may not be fully accurate for workouts with varied intensities. Planned improvements will be to analyze HR data points within each activity.
+          Zones are set by default using the max heart rate found in your activities and can be adjusted in the config section (gear icon). This chart can be disabled by unchecking Heart Rate Zones in config.
         </p>
       </div>
       <div className="space-y-2 sm:space-y-3 flex-1" style={{ minHeight: '250px' }}>
@@ -188,7 +194,7 @@ export default function EightyTwentyChart({ endDate, unit }: EightyTwentyChartPr
                   <div className="h-full flex relative">
                     {/* Easy miles (green) */}
                     <div
-                      className="bg-gradient-to-r from-green-500 to-green-600 h-full flex items-center justify-center transition-all duration-300"
+                      className="bg-linear-to-r from-green-500 to-green-600 h-full flex items-center justify-center transition-all duration-300"
                       style={{ width: `${data.easyPercent}%` }}
                     >
                       {data.easyPercent > 15 && (
@@ -199,7 +205,7 @@ export default function EightyTwentyChart({ endDate, unit }: EightyTwentyChartPr
                     </div>
                     {/* Hard miles (red) */}
                     <div
-                      className="bg-gradient-to-r from-red-500 to-red-600 h-full flex items-center justify-center transition-all duration-300"
+                      className="bg-linear-to-r from-red-500 to-red-600 h-full flex items-center justify-center transition-all duration-300"
                       style={{ width: `${data.hardPercent}%` }}
                     >
                       {data.hardPercent > 15 && (
