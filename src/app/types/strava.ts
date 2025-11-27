@@ -14,6 +14,28 @@ export interface StravaActivity {
   average_heartrate?: number;
   max_heartrate?: number;
   calories?: number;
+  suffer_score?: number; // Strava's relative effort score
+  has_heartrate?: boolean;
+}
+
+export interface HeartRateZoneDistribution {
+  min: number;
+  max: number;
+  time: number; // seconds spent in this zone
+}
+
+export interface HeartRateZones {
+  score?: number;
+  distribution_buckets: HeartRateZoneDistribution[];
+  type: string;
+  resource_state: number;
+  sensor_based: boolean;
+  points?: number;
+  custom_zones: boolean;
+}
+
+export interface DetailedStravaActivity extends StravaActivity {
+  zones?: HeartRateZones[];
 }
 
 export interface StravaTokenResponse {

@@ -9,17 +9,16 @@ import DetailedMetricsTable from "./components/DetailedMetricsTable";
 import PaceAnalysisChart from "./components/PaceAnalysisChart";
 import DistanceAnalysisChart from "./components/DistanceAnalysisChart";
 import ConnectStrava from "./components/ConnectStrava";
-import HeartRateZonesConfig from "./components/HeartRateZonesConfig";
 import EightyTwentyChart from "./components/EightyTwentyChart";
+import HeartRateAnalysis from "./components/HeartRateAnalysis";
 import { getLastFullWeek } from "./utils/dateUtils";
 import { useUnit } from "./context/UnitContext";
 import { useStravaAuth } from "./context/StravaAuthContext";
 import { useWeekStart } from "./context/WeekStartContext";
 import { useActivityType } from "./context/ActivityTypeContext";
-import { useConfig } from "./components/ClientLayout";
 import { useHeartRateZones } from "./context/HeartRateZonesContext";
 
-type TabType = 'dashboard' | 'detailed' | 'pace' | 'distance' | 'cadence';
+type TabType = 'dashboard' | 'detailed' | 'pace' | 'distance' | 'cadence' | 'heartRate';
 
 export default function Home() {
   const { weekStartDay } = useWeekStart();
@@ -29,7 +28,6 @@ export default function Home() {
   const { isAuthenticated, setIsAuthenticated } = useStravaAuth();
   const { activityType } = useActivityType();
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
-  const { showConfig } = useConfig();
   const { enabled: hrZonesEnabled } = useHeartRateZones();
 
   // Check for auth success in URL on mount
@@ -88,8 +86,6 @@ export default function Home() {
       <div className="max-w-7xl mx-auto py-4 sm:py-8 md:py-12 px-3 sm:px-4">
         <WeekSelector selectedWeek={selectedWeek} onWeekChange={setSelectedWeek} />
         
-        {showConfig && <HeartRateZonesConfig />}
-        
         {/* Tab Navigation */}
         <div className="mb-6 border-b border-gray-200 dark:border-gray-700">
           <nav className="-mb-px flex space-x-8">
@@ -145,6 +141,16 @@ export default function Home() {
                 Cadence
               </button>
             )}
+            <button
+              onClick={() => setActiveTab('heartRate')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeTab === 'heartRate'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+              }`}
+            >
+              Heart Rate Analysis
+            </button>
           </nav>
         </div>
 
@@ -186,6 +192,10 @@ export default function Home() {
               </div>
             </div>
           )
+        )}
+
+        {activeTab === 'heartRate' && (
+          <HeartRateAnalysis endDate={selectedWeek} unit={unit} />
         )}
       </div>
     </div>
