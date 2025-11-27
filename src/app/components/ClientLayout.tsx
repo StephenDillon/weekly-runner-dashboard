@@ -7,6 +7,7 @@ import { StravaAuthProvider } from "../context/StravaAuthContext";
 import { WeekStartProvider } from "../context/WeekStartContext";
 import { DisabledActivitiesProvider } from "../context/DisabledActivitiesContext";
 import { ActivityTypeProvider } from "../context/ActivityTypeContext";
+import { HeartRateZonesProvider } from "../context/HeartRateZonesContext";
 
 const ConfigContext = createContext<{ showConfig: boolean; setShowConfig: (show: boolean) => void } | undefined>(undefined);
 
@@ -36,7 +37,9 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         <WeekStartProvider>
           <DisabledActivitiesProvider>
             <UnitProvider>
-              <ClientLayoutContent>{children}</ClientLayoutContent>
+              <HeartRateZonesProvider>
+                <ClientLayoutContent>{children}</ClientLayoutContent>
+              </HeartRateZonesProvider>
             </UnitProvider>
           </DisabledActivitiesProvider>
         </WeekStartProvider>
