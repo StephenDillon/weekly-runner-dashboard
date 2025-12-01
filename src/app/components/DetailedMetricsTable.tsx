@@ -107,20 +107,37 @@ export default function DetailedMetricsTable({ endDate, unit }: DetailedMetricsT
   const [nameFilter, setNameFilter] = useState('');
   const [showDisabled, setShowDisabled] = useState(true);
   const [visibleColumns, setVisibleColumns] = useState<Set<ColumnId>>(new Set(ALL_COLUMNS));
+  const [columnOrder, setColumnOrder] = useState<ColumnId[]>(ALL_COLUMNS);
   const [isColumnMenuOpen, setIsColumnMenuOpen] = useState(false);
+  const [draggedColumn, setDraggedColumn] = useState<ColumnId | null>(null);
   const columnMenuRef = useRef<HTMLDivElement>(null);
 
-  // Load visible columns from localStorage
+  // Load visible columns and order from localStorage
   useEffect(() => {
-    const saved = localStorage.getItem('activitiesTableColumns');
-    if (saved) {
+    const savedVisible = localStorage.getItem('activitiesTableColumns');
+    if (savedVisible) {
       try {
-        const parsed = JSON.parse(saved);
+        const parsed = JSON.parse(savedVisible);
         if (Array.isArray(parsed)) {
           setVisibleColumns(new Set(parsed as ColumnId[]));
         }
       } catch (e) {
         console.error('Failed to parse visible columns', e);
+      }
+    }
+
+    const savedOrder = localStorage.getItem('activitiesTableColumnOrder');
+    if (savedOrder) {
+      try {
+        const parsed = JSON.parse(savedOrder);
+        if (Array.isArray(parsed)) {
+          // Ensure all columns are present (in case of updates)
+          const savedSet = new Set(parsed);
+          const missing = ALL_COLUMNS.filter(c => !savedSet.has(c));
+          setColumnOrder([...(parsed as ColumnId[]), ...missing]);
+        }
+      } catch (e) {
+        console.error('Failed to parse column order', e);
       }
     }
   }, []);
@@ -147,6 +164,37 @@ export default function DetailedMetricsTable({ endDate, unit }: DetailedMetricsT
     }
     setVisibleColumns(newSet);
     localStorage.setItem('activitiesTableColumns', JSON.stringify(Array.from(newSet)));
+  };
+
+  const handleDragStart = (e: React.DragEvent, col: ColumnId) => {
+    setDraggedColumn(col);
+    e.dataTransfer.effectAllowed = 'move';
+    // Optional: set a transparent drag image or custom styling
+  };
+
+  const handleDragOver = (e: React.DragEvent, col: ColumnId) => {
+    e.preventDefault(); // Necessary to allow dropping
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent, targetCol: ColumnId) => {
+    e.preventDefault();
+    if (!draggedColumn || draggedColumn === targetCol) return;
+
+    const newOrder = [...columnOrder];
+    const draggedIdx = newOrder.indexOf(draggedColumn);
+    const targetIdx = newOrder.indexOf(targetCol);
+
+    if (draggedIdx === -1 || targetIdx === -1) return;
+
+    // Remove dragged item
+    newOrder.splice(draggedIdx, 1);
+    // Insert at new position
+    newOrder.splice(targetIdx, 0, draggedColumn);
+
+    setColumnOrder(newOrder);
+    localStorage.setItem('activitiesTableColumnOrder', JSON.stringify(newOrder));
+    setDraggedColumn(null);
   };
 
   const handleSort = (field: SortField) => {
@@ -299,17 +347,28 @@ export default function DetailedMetricsTable({ endDate, unit }: DetailedMetricsT
             </button>
 
             {isColumnMenuOpen && (
-              <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg z-50 border border-gray-200 dark:border-gray-700 py-1 max-h-96 overflow-y-auto">
-                {ALL_COLUMNS.map((col) => (
-                  <label key={col} className="flex items-center px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
+              <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-md shadow-lg z-50 border border-gray-200 dark:border-gray-700 py-1 max-h-96 overflow-y-auto">
+                {columnOrder.map((col, index) => (
+                  <div
+                    key={col}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, col)}
+                    onDragOver={(e) => handleDragOver(e, col)}
+                    onDrop={(e) => handleDrop(e, col)}
+                    className={`flex items-center justify-between px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-move ${draggedColumn === col ? 'opacity-50 bg-gray-50 dark:bg-gray-800' : ''}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-gray-400 cursor-move select-none" title="Drag to reorder">⋮⋮</span>
+                      <span className="text-sm text-gray-700 dark:text-gray-200 select-none">{COLUMN_LABELS[col]}</span>
+                    </div>
                     <input
                       type="checkbox"
                       checked={visibleColumns.has(col)}
                       onChange={() => toggleColumn(col)}
-                      className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      className="ml-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
+                      onClick={(e) => e.stopPropagation()}
                     />
-                    <span className="text-sm text-gray-700 dark:text-gray-200">{COLUMN_LABELS[col]}</span>
-                  </label>
+                  </div>
                 ))}
               </div>
             )}
@@ -321,93 +380,40 @@ export default function DetailedMetricsTable({ endDate, unit }: DetailedMetricsT
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-900">
               <tr>
-                {visibleColumns.has('disabled') && (
-                  <th className="sticky left-0 z-10 bg-gray-50 dark:bg-gray-900 px-3 sm:px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Disabled
-                  </th>
-                )}
-                {visibleColumns.has('name') && (
-                  <th
-                    className="sticky left-12 z-10 bg-gray-50 dark:bg-gray-900 px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-300"
-                    onClick={() => handleSort('name')}
-                  >
-                    Name<SortIcon field="name" />
-                  </th>
-                )}
-                {visibleColumns.has('date') && (
-                  <th
-                    className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap cursor-pointer hover:text-gray-700 dark:hover:text-gray-300"
-                    onClick={() => handleSort('date')}
-                  >
-                    Date<SortIcon field="date" />
-                  </th>
-                )}
-                {visibleColumns.has('distance') && (
-                  <th
-                    className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap cursor-pointer hover:text-gray-700 dark:hover:text-gray-300"
-                    onClick={() => handleSort('distance')}
-                  >
-                    Distance<SortIcon field="distance" />
-                  </th>
-                )}
-                {visibleColumns.has('time') && (
-                  <th
-                    className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap cursor-pointer hover:text-gray-700 dark:hover:text-gray-300"
-                    onClick={() => handleSort('time')}
-                  >
-                    Time<SortIcon field="time" />
-                  </th>
-                )}
-                {visibleColumns.has('pace') && (
-                  <th
-                    className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap cursor-pointer hover:text-gray-700 dark:hover:text-gray-300"
-                    onClick={() => handleSort('pace')}
-                  >
-                    Pace<SortIcon field="pace" />
-                  </th>
-                )}
-                {visibleColumns.has('effort') && (
-                  <th
-                    className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap cursor-pointer hover:text-gray-700 dark:hover:text-gray-300"
-                    onClick={() => handleSort('effort')}
-                    title="Relative Effort: Strava's calculated effort score based on heart rate data"
-                  >
-                    Effort<SortIcon field="effort" />
-                  </th>
-                )}
-                {visibleColumns.has('ae') && (
-                  <th
-                    className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap cursor-pointer hover:text-gray-700 dark:hover:text-gray-300"
-                    onClick={() => handleSort('ae')}
-                    title="Aerobic Efficiency: Speed per heartbeat(AVG Speed / AVG Heart Rate) × 100. Higher values indicate better aerobic fitness and efficiency."
-                  >
-                    AE<SortIcon field="ae" />
-                  </th>
-                )}
-                {visibleColumns.has('avgHR') && (
-                  <th
-                    className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap cursor-pointer hover:text-gray-700 dark:hover:text-gray-300"
-                    onClick={() => handleSort('avgHR')}
-                  >
-                    Avg HR<SortIcon field="avgHR" />
-                  </th>
-                )}
-                {visibleColumns.has('maxHR') && (
-                  <th
-                    className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap cursor-pointer hover:text-gray-700 dark:hover:text-gray-300"
-                    onClick={() => handleSort('maxHR')}
-                  >
-                    Max HR<SortIcon field="maxHR" />
-                  </th>
-                )}
-                {visibleColumns.has('cadence') && (
-                  <th
-                    className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap cursor-pointer hover:text-gray-700 dark:hover:text-gray-300"
-                    onClick={() => handleSort('cadence')}
-                  >
-                    Cadence<SortIcon field="cadence" />
-                  </th>
-                )}
+                {columnOrder.map(colId => {
+                  if (!visibleColumns.has(colId)) return null;
+
+                  if (colId === 'disabled') {
+                    return (
+                      <th key={colId} className="px-3 sm:px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Disabled
+                      </th>
+                    );
+                  }
+
+                  if (colId === 'name') {
+                    return (
+                      <th
+                        key={colId}
+                        className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-300"
+                        onClick={() => handleSort('name')}
+                      >
+                        Name<SortIcon field="name" />
+                      </th>
+                    );
+                  }
+
+                  return (
+                    <th
+                      key={colId}
+                      className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap cursor-pointer hover:text-gray-700 dark:hover:text-gray-300"
+                      onClick={() => handleSort(colId as SortField)}
+                      title={colId === 'effort' ? "Relative Effort: Strava's calculated effort score based on heart rate data" : colId === 'ae' ? "Aerobic Efficiency: Speed per heartbeat(AVG Speed / AVG Heart Rate) × 100. Higher values indicate better aerobic fitness and efficiency." : undefined}
+                    >
+                      {COLUMN_LABELS[colId]}<SortIcon field={colId as SortField} />
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -419,73 +425,92 @@ export default function DetailedMetricsTable({ endDate, unit }: DetailedMetricsT
 
                 return (
                   <tr key={activity.id}>
-                    {visibleColumns.has('disabled') && (
-                      <td className="sticky left-0 z-10 bg-white dark:bg-gray-800 px-3 sm:px-6 py-4 text-center">
-                        <input
-                          type="checkbox"
-                          checked={isDisabled}
-                          onChange={() => toggleActivity(activity.id)}
-                          className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600 cursor-pointer"
-                        />
-                      </td>
-                    )}
-                    {visibleColumns.has('name') && (
-                      <td className={`sticky left-12 z-10 bg-white dark:bg-gray-800 px-3 sm:px-6 py-4 text-sm font-medium max-w-xs truncate ${isDisabled ? 'line-through' : ''}`}>
-                        <a
-                          href={`https://www.strava.com/activities/${activity.id}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline"
-                        >
-                          {activity.name}
-                        </a>
-                      </td>
-                    )}
-                    {visibleColumns.has('date') && (
-                      <td className={`px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300 text-right ${isDisabled ? 'line-through' : ''}`} style={{ fontFamily: monoFont }}>
-                        {formatDate(activity.start_date)}
-                      </td>
-                    )}
-                    {visibleColumns.has('distance') && (
-                      <td className={`px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300 text-right ${isDisabled ? 'line-through' : ''}`} style={{ fontFamily: monoFont }}>
-                        {convertedDistance.toFixed(2)} {unitLabel}
-                      </td>
-                    )}
-                    {visibleColumns.has('time') && (
-                      <td className={`px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300 text-right ${isDisabled ? 'line-through' : ''}`} style={{ fontFamily: monoFont }}>
-                        {formatTime(activity.moving_time)}
-                      </td>
-                    )}
-                    {visibleColumns.has('pace') && (
-                      <td className={`px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300 text-right ${isDisabled ? 'line-through' : ''}`} style={{ fontFamily: monoFont }}>
-                        {formatPace(activity.average_speed, unit)} {paceLabel}
-                      </td>
-                    )}
-                    {visibleColumns.has('effort') && (
-                      <td className={`px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300 text-right ${isDisabled ? 'line-through' : ''}`} style={{ fontFamily: monoFont }}>
-                        {activity.suffer_score || '-'}
-                      </td>
-                    )}
-                    {visibleColumns.has('ae') && (
-                      <td className={`px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300 text-right ${isDisabled ? 'line-through' : ''}`} style={{ fontFamily: monoFont }}>
-                        {aerobicEfficiency > 0 ? aerobicEfficiency.toFixed(2) : '-'}
-                      </td>
-                    )}
-                    {visibleColumns.has('avgHR') && (
-                      <td className={`px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300 text-right ${isDisabled ? 'line-through' : ''}`} style={{ fontFamily: monoFont }}>
-                        {activity.average_heartrate ? Math.round(activity.average_heartrate) : '-'}
-                      </td>
-                    )}
-                    {visibleColumns.has('maxHR') && (
-                      <td className={`px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300 text-right ${isDisabled ? 'line-through' : ''}`} style={{ fontFamily: monoFont }}>
-                        {activity.max_heartrate ? Math.round(activity.max_heartrate) : '-'}
-                      </td>
-                    )}
-                    {visibleColumns.has('cadence') && (
-                      <td className={`px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300 text-right ${isDisabled ? 'line-through' : ''}`} style={{ fontFamily: monoFont }}>
-                        {activity.average_cadence ? Math.round(activity.average_cadence * 2) : '-'}
-                      </td>
-                    )}
+                    {columnOrder.map(colId => {
+                      if (!visibleColumns.has(colId)) return null;
+
+                      switch (colId) {
+                        case 'disabled':
+                          return (
+                            <td key={colId} className="px-3 sm:px-6 py-4 text-center">
+                              <input
+                                type="checkbox"
+                                checked={isDisabled}
+                                onChange={() => toggleActivity(activity.id)}
+                                className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600 cursor-pointer"
+                              />
+                            </td>
+                          );
+                        case 'name':
+                          return (
+                            <td key={colId} className={`px-3 sm:px-6 py-4 text-sm font-medium max-w-xs truncate ${isDisabled ? 'line-through' : ''}`}>
+                              <a
+                                href={`https://www.strava.com/activities/${activity.id}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline"
+                              >
+                                {activity.name}
+                              </a>
+                            </td>
+                          );
+                        case 'date':
+                          return (
+                            <td key={colId} className={`px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300 text-right ${isDisabled ? 'line-through' : ''}`} style={{ fontFamily: monoFont }}>
+                              {formatDate(activity.start_date)}
+                            </td>
+                          );
+                        case 'distance':
+                          return (
+                            <td key={colId} className={`px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300 text-right ${isDisabled ? 'line-through' : ''}`} style={{ fontFamily: monoFont }}>
+                              {convertedDistance.toFixed(2)} {unitLabel}
+                            </td>
+                          );
+                        case 'time':
+                          return (
+                            <td key={colId} className={`px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300 text-right ${isDisabled ? 'line-through' : ''}`} style={{ fontFamily: monoFont }}>
+                              {formatTime(activity.moving_time)}
+                            </td>
+                          );
+                        case 'pace':
+                          return (
+                            <td key={colId} className={`px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300 text-right ${isDisabled ? 'line-through' : ''}`} style={{ fontFamily: monoFont }}>
+                              {formatPace(activity.average_speed, unit)} {paceLabel}
+                            </td>
+                          );
+                        case 'effort':
+                          return (
+                            <td key={colId} className={`px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300 text-right ${isDisabled ? 'line-through' : ''}`} style={{ fontFamily: monoFont }}>
+                              {activity.suffer_score || '-'}
+                            </td>
+                          );
+                        case 'ae':
+                          return (
+                            <td key={colId} className={`px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300 text-right ${isDisabled ? 'line-through' : ''}`} style={{ fontFamily: monoFont }}>
+                              {aerobicEfficiency > 0 ? aerobicEfficiency.toFixed(2) : '-'}
+                            </td>
+                          );
+                        case 'avgHR':
+                          return (
+                            <td key={colId} className={`px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300 text-right ${isDisabled ? 'line-through' : ''}`} style={{ fontFamily: monoFont }}>
+                              {activity.average_heartrate ? Math.round(activity.average_heartrate) : '-'}
+                            </td>
+                          );
+                        case 'maxHR':
+                          return (
+                            <td key={colId} className={`px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300 text-right ${isDisabled ? 'line-through' : ''}`} style={{ fontFamily: monoFont }}>
+                              {activity.max_heartrate ? Math.round(activity.max_heartrate) : '-'}
+                            </td>
+                          );
+                        case 'cadence':
+                          return (
+                            <td key={colId} className={`px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300 text-right ${isDisabled ? 'line-through' : ''}`} style={{ fontFamily: monoFont }}>
+                              {activity.average_cadence ? Math.round(activity.average_cadence * 2) : '-'}
+                            </td>
+                          );
+                        default:
+                          return null;
+                      }
+                    })}
                   </tr>
                 );
               })}
