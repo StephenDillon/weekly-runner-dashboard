@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { StravaActivity } from '../types/strava';
+import { StravaActivity, DetailedStravaActivity } from '../types/strava';
 import { useStravaAuth } from '../context/StravaAuthContext';
 import { useActivityType } from '../context/ActivityTypeContext';
 import { getClientSideStravaClient } from '../lib/stravaClient';
@@ -7,19 +7,19 @@ import { StravaService } from '../lib/stravaService';
 
 interface CachedActivities {
   version: string;
-  activities: StravaActivity[];
+  activities: DetailedStravaActivity[];
   lastFetched: number;
   startDate: string;
   endDate: string;
 }
 
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3'; // Incremented for zone support
 const CACHE_KEY = `strava_activities_cache_${CACHE_VERSION}`;
 const RECENT_CACHE_DURATION = 15 * 60 * 1000; // 15 minutes for recent activities
 const OLD_CACHE_DURATION = 7 * 24 * 60 * 60 * 1000; // 1 week for older activities
 
-export function useStravaActivities(startDate: Date, endDate: Date) {
-  const [activities, setActivities] = useState<StravaActivity[]>([]);
+export function useStravaActivities(startDate: Date, endDate: Date, includeZones: boolean = false) {
+  const [activities, setActivities] = useState<DetailedStravaActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { setIsAuthenticated } = useStravaAuth();
@@ -27,10 +27,10 @@ export function useStravaActivities(startDate: Date, endDate: Date) {
 
   useEffect(() => {
     let isMounted = true;
-    
+
     async function fetchActivities() {
       if (!isMounted) return;
-      
+
       setLoading(true);
       setError(null);
 
@@ -40,6 +40,9 @@ export function useStravaActivities(startDate: Date, endDate: Date) {
       try {
         // Check cache first
         const cached = getCachedActivities();
+        let currentActivities: DetailedStravaActivity[] = [];
+        let needsFetch = true;
+
         if (cached && isCacheValid(cached, startDateStr, endDateStr)) {
           console.log('✓ Using cached activities', {
             totalCached: cached.activities.length,
@@ -47,68 +50,107 @@ export function useStravaActivities(startDate: Date, endDate: Date) {
             cacheAge: `${Math.round((Date.now() - cached.lastFetched) / 60000)}min`,
             activityType
           });
-          const filtered = filterActivitiesByDateRange(cached.activities, startDate, endDate);
-          const typeFiltered = filterByActivityType(filtered, activityType);
-          if (isMounted) {
-            setActivities(typeFiltered);
-            setLoading(false);
+          currentActivities = cached.activities;
+          needsFetch = false;
+        }
+
+        if (needsFetch) {
+          // Determine what dates we need to fetch
+          const { fetchStartDate, fetchEndDate } = determineFetchRange(
+            cached,
+            startDateStr,
+            endDateStr
+          );
+
+          console.log('⟳ Fetching fresh activities from Strava API', {
+            reason: cached ? 'cache miss or expired' : 'no cache',
+            requestedRange: `${startDateStr} to ${endDateStr}`,
+            fetchingRange: `${fetchStartDate} to ${fetchEndDate}`,
+            activityType
+          });
+
+          // Get Strava client and call API directly
+          const client = await getClientSideStravaClient();
+          if (!client) {
+            setIsAuthenticated(false);
+            throw new Error('Your Strava session has expired. Please connect with Strava again.');
           }
-          return;
+
+          const stravaService = new StravaService(client);
+          const newActivities = await stravaService.getActivitiesInDateRange(
+            new Date(fetchStartDate),
+            new Date(fetchEndDate)
+          );
+
+          // Merge with cached activities if needed
+          if (cached && cached.activities.length > 0) {
+            currentActivities = mergeActivities(cached.activities, newActivities);
+          } else {
+            currentActivities = newActivities;
+          }
+
+          // Update cache with expanded date range (zones might be missing still)
+          updateCache(currentActivities, fetchStartDate, fetchEndDate);
         }
 
-        // Determine what dates we need to fetch
-        const { fetchStartDate, fetchEndDate } = determineFetchRange(
-          cached,
-          startDateStr,
-          endDateStr
-        );
+        // Filter to requested range and activity type for display
+        const filteredByDate = filterActivitiesByDateRange(currentActivities, startDate, endDate);
+        const filteredByType = filterByActivityType(filteredByDate, activityType);
 
-        console.log('⟳ Fetching fresh activities from Strava API', {
-          reason: cached ? 'cache miss or expired' : 'no cache',
-          requestedRange: `${startDateStr} to ${endDateStr}`,
-          fetchingRange: `${fetchStartDate} to ${fetchEndDate}`,
-          activityType
-        });
+        // If zones are requested, check if we need to fetch them for the *displayed* activities
+        if (includeZones) {
+          const activitiesNeedingZones = filteredByType.filter(a => a.has_heartrate && !a.zones);
 
-        // Get Strava client and call API directly
-        const client = await getClientSideStravaClient();
-        if (!client) {
-          setIsAuthenticated(false);
-          throw new Error('Your Strava session has expired. Please connect with Strava again.');
+          if (activitiesNeedingZones.length > 0) {
+            console.log(`⟳ Fetching zones for ${activitiesNeedingZones.length} activities`);
+
+            const client = await getClientSideStravaClient();
+            if (!client) {
+              setIsAuthenticated(false);
+              throw new Error('Your Strava session has expired. Please connect with Strava again.');
+            }
+            const stravaService = new StravaService(client);
+
+            // Fetch zones in parallel
+            const activitiesWithZones = await Promise.all(
+              activitiesNeedingZones.map(async (activity) => {
+                try {
+                  const zones = await stravaService.getActivityZones(activity.id);
+                  return { ...activity, zones };
+                } catch (e) {
+                  console.warn(`Failed to fetch zones for activity ${activity.id}`, e);
+                  return activity;
+                }
+              })
+            );
+
+            // Update currentActivities with the new zone data
+            const zonesMap = new Map(activitiesWithZones.map(a => [a.id, a]));
+            currentActivities = currentActivities.map(a => zonesMap.get(a.id) || a);
+
+            // Update cache again with the zone data
+            // We use the cached start/end dates if available, otherwise the requested ones
+            const cacheStart = cached?.startDate || startDateStr;
+            const cacheEnd = cached?.endDate || endDateStr;
+            updateCache(currentActivities, cacheStart, cacheEnd);
+
+            // Re-filter to ensure we have the latest objects
+            const updatedFilteredByDate = filterActivitiesByDateRange(currentActivities, startDate, endDate);
+            const updatedFilteredByType = filterByActivityType(updatedFilteredByDate, activityType);
+
+            if (isMounted) {
+              setActivities(updatedFilteredByType);
+              setLoading(false);
+            }
+            return;
+          }
         }
 
-        const stravaService = new StravaService(client);
-        const newActivities = await stravaService.getActivitiesInDateRange(
-          new Date(fetchStartDate),
-          new Date(fetchEndDate)
-        );
-
-        // Merge with cached activities if needed
-        let allActivities = newActivities;
-        if (cached && cached.activities.length > 0) {
-          allActivities = mergeActivities(cached.activities, newActivities);
-        }
-
-        // Update cache with expanded date range
-        const cacheData: CachedActivities = {
-          version: CACHE_VERSION,
-          activities: allActivities,
-          lastFetched: Date.now(),
-          startDate: fetchStartDate,
-          endDate: fetchEndDate,
-        };
-        localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
-        console.log('💾 Cache updated', {
-          totalActivities: allActivities.length,
-          dateRange: `${fetchStartDate} to ${fetchEndDate}`
-        });
-
-        // Filter to requested range and activity type
-        const filtered = filterActivitiesByDateRange(allActivities, startDate, endDate);
-        const typeFiltered = filterByActivityType(filtered, activityType);
         if (isMounted) {
-          setActivities(typeFiltered);
+          setActivities(filteredByType);
+          setLoading(false);
         }
+
       } catch (err) {
         console.error('Error fetching activities:', err);
         if (isMounted) {
@@ -122,22 +164,33 @@ export function useStravaActivities(startDate: Date, endDate: Date) {
     }
 
     fetchActivities();
-    
+
     return () => {
       isMounted = false;
     };
-  }, [startDate.getTime(), endDate.getTime(), activityType]);
+  }, [startDate.getTime(), endDate.getTime(), activityType, includeZones]);
 
   return { activities, loading, error };
+}
+
+function updateCache(activities: DetailedStravaActivity[], startDate: string, endDate: string) {
+  const cacheData: CachedActivities = {
+    version: CACHE_VERSION,
+    activities,
+    lastFetched: Date.now(),
+    startDate,
+    endDate,
+  };
+  localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
 }
 
 function getCachedActivities(): CachedActivities | null {
   try {
     const cached = localStorage.getItem(CACHE_KEY);
     if (!cached) return null;
-    
+
     const parsed = JSON.parse(cached) as CachedActivities;
-    
+
     // Validate cache version
     if (parsed.version !== CACHE_VERSION) {
       console.log('⚠ Cache version mismatch, clearing old cache', {
@@ -147,7 +200,7 @@ function getCachedActivities(): CachedActivities | null {
       localStorage.removeItem(CACHE_KEY);
       return null;
     }
-    
+
     return parsed;
   } catch {
     return null;
@@ -166,7 +219,7 @@ function isCacheValid(
   const oneWeekAgo = new Date();
   oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
   const oneWeekAgoStr = oneWeekAgo.toISOString().split('T')[0];
-  
+
   // If requested range includes recent activities, use shorter cache duration
   const isRequestingRecentData = requestedEnd >= oneWeekAgoStr;
   const cacheDuration = isRequestingRecentData ? RECENT_CACHE_DURATION : OLD_CACHE_DURATION;
@@ -208,10 +261,10 @@ function determineFetchRange(
 }
 
 function mergeActivities(
-  cached: StravaActivity[],
-  newActivities: StravaActivity[]
-): StravaActivity[] {
-  const activityMap = new Map<number, StravaActivity>();
+  cached: DetailedStravaActivity[],
+  newActivities: DetailedStravaActivity[]
+): DetailedStravaActivity[] {
+  const activityMap = new Map<number, DetailedStravaActivity>();
 
   // Add cached activities
   cached.forEach((activity) => {
@@ -219,8 +272,14 @@ function mergeActivities(
   });
 
   // Add/override with new activities
+  // Preserve zones if existing activity has them and new one doesn't (though usually new one is fresher)
   newActivities.forEach((activity) => {
-    activityMap.set(activity.id, activity);
+    const existing = activityMap.get(activity.id);
+    if (existing?.zones && !activity.zones) {
+      activityMap.set(activity.id, { ...activity, zones: existing.zones });
+    } else {
+      activityMap.set(activity.id, activity);
+    }
   });
 
   return Array.from(activityMap.values()).sort(
@@ -230,10 +289,10 @@ function mergeActivities(
 }
 
 function filterActivitiesByDateRange(
-  activities: StravaActivity[],
+  activities: DetailedStravaActivity[],
   startDate: Date,
   endDate: Date
-): StravaActivity[] {
+): DetailedStravaActivity[] {
   return activities.filter((activity) => {
     const activityDate = new Date(activity.start_date);
     return activityDate >= startDate && activityDate <= endDate;
@@ -241,10 +300,10 @@ function filterActivitiesByDateRange(
 }
 
 function filterByActivityType(
-  activities: StravaActivity[],
+  activities: DetailedStravaActivity[],
   activityType: 'running' | 'cycling'
-): StravaActivity[] {
-  let filtered: StravaActivity[];
+): DetailedStravaActivity[] {
+  let filtered: DetailedStravaActivity[];
   if (activityType === 'running') {
     filtered = activities.filter((activity) => activity.type === 'Run');
   } else {
@@ -252,6 +311,6 @@ function filterByActivityType(
     const cyclingTypes = ['Ride', 'VirtualRide', 'EBikeRide', 'Handcycle', 'GravelRide'];
     filtered = activities.filter((activity) => cyclingTypes.includes(activity.type));
   }
-  
+
   return filtered;
 }

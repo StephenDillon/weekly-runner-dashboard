@@ -10,7 +10,7 @@ import PaceAnalysisChart from "./components/PaceAnalysisChart";
 import DistanceAnalysisChart from "./components/DistanceAnalysisChart";
 import ConnectStrava from "./components/ConnectStrava";
 import EightyTwentyChart from "./components/EightyTwentyChart";
-import HeartRateAnalysis from "./components/HeartRateAnalysis";
+
 import RacesTab from "./components/RacesTab";
 import RaceCountdownCard from "./components/RaceCountdownCard";
 import { getLastFullWeek } from "./utils/dateUtils";
@@ -21,7 +21,7 @@ import { useActivityType } from "./context/ActivityTypeContext";
 import { useHeartRateZones } from "./context/HeartRateZonesContext";
 import { useRaces } from "./hooks/useRaces";
 
-type TabType = 'dashboard' | 'detailed' | 'pace' | 'distance' | 'cadence' | 'heartRate' | 'races';
+type TabType = 'dashboard' | 'detailed' | 'pace' | 'distance' | 'cadence' | 'races';
 
 export default function Home() {
   const { weekStartDay } = useWeekStart();
@@ -152,15 +152,7 @@ export default function Home() {
                 Cadence
               </button>
             )}
-            <button
-              onClick={() => setActiveTab('heartRate')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'heartRate'
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-                }`}
-            >
-              Heart Rate Analysis
-            </button>
+
             <button
               onClick={() => setActiveTab('races')}
               className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'races'
@@ -220,9 +212,7 @@ export default function Home() {
           )
         )}
 
-        {activeTab === 'heartRate' && (
-          <HeartRateAnalysis endDate={selectedWeek} unit={unit} />
-        )}
+
 
         {activeTab === 'races' && (
           <RacesTab races={races} onAddRace={addRace} onRemoveRace={removeRace} />

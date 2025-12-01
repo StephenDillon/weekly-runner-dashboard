@@ -7,13 +7,13 @@ import { aggregateActivitiesByWeek, generateWeekStarts, metersToMiles } from '..
 import { useWeekStart } from '../context/WeekStartContext';
 import { useDisabledActivities } from '../context/DisabledActivitiesContext';
 import { useActivityType } from '../context/ActivityTypeContext';
-import { StravaActivity } from '../types/strava';
+import { StravaActivity, DetailedStravaActivity } from '../types/strava';
 
-type SortField = 'date' | 'name' | 'distance' | 'time' | 'pace' | 'effort' | 'ae' | 'avgHR' | 'maxHR' | 'cadence';
+type SortField = 'date' | 'name' | 'distance' | 'time' | 'pace' | 'effort' | 'ae' | 'avgHR' | 'maxHR' | 'cadence' | 'zone1' | 'zone2' | 'zone3' | 'zone4' | 'zone5';
 type SortDirection = 'asc' | 'desc';
-type ColumnId = 'disabled' | 'name' | 'date' | 'distance' | 'time' | 'pace' | 'effort' | 'ae' | 'avgHR' | 'maxHR' | 'cadence';
+type ColumnId = 'disabled' | 'name' | 'date' | 'distance' | 'time' | 'pace' | 'effort' | 'ae' | 'avgHR' | 'maxHR' | 'cadence' | 'zone1' | 'zone2' | 'zone3' | 'zone4' | 'zone5';
 
-const ALL_COLUMNS: ColumnId[] = ['disabled', 'name', 'date', 'distance', 'time', 'pace', 'effort', 'ae', 'avgHR', 'maxHR', 'cadence'];
+const ALL_COLUMNS: ColumnId[] = ['disabled', 'name', 'date', 'distance', 'time', 'pace', 'effort', 'ae', 'avgHR', 'maxHR', 'cadence', 'zone1', 'zone2', 'zone3', 'zone4', 'zone5'];
 const COLUMN_LABELS: Record<ColumnId, string> = {
   disabled: 'Disabled',
   name: 'Name',
@@ -25,7 +25,12 @@ const COLUMN_LABELS: Record<ColumnId, string> = {
   ae: 'AE',
   avgHR: 'Avg HR',
   maxHR: 'Max HR',
-  cadence: 'Cadence'
+  cadence: 'Cadence',
+  zone1: 'Zone 1',
+  zone2: 'Zone 2',
+  zone3: 'Zone 3',
+  zone4: 'Zone 4',
+  zone5: 'Zone 5'
 };
 
 interface DetailedMetricsTableProps {
@@ -68,6 +73,26 @@ function formatPace(metersPerSecond: number, unit: 'miles' | 'kilometers'): stri
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
+function formatPercentage(zoneTime: number, totalTime: number): string {
+  if (totalTime === 0 || !isFinite(totalTime)) return '0.0%';
+  const percentage = (zoneTime / totalTime) * 100;
+  return `${percentage.toFixed(1)}%`;
+}
+
+function formatTimeReadable(seconds: number): string {
+  if (seconds === 0 || !isFinite(seconds)) return '0s';
+  const hours = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  const secs = Math.round(seconds % 60);
+
+  const parts = [];
+  if (hours > 0) parts.push(`${hours}h`);
+  if (mins > 0) parts.push(`${mins}m`);
+  if (secs > 0 || parts.length === 0) parts.push(`${secs}s`);
+
+  return parts.join(' ');
+}
+
 function calculateAerobicEfficiency(activity: StravaActivity, unit: 'miles' | 'kilometers'): number {
   // Aerobic Efficiency (AE) = Normalized Graded Pace (NGP) / Average Heart Rate
   // For simplicity, we'll use pace instead of NGP since we don't have elevation-adjusted data
@@ -106,7 +131,10 @@ export default function DetailedMetricsTable({ endDate, unit }: DetailedMetricsT
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [nameFilter, setNameFilter] = useState('');
   const [showDisabled, setShowDisabled] = useState(true);
-  const [visibleColumns, setVisibleColumns] = useState<Set<ColumnId>>(new Set(ALL_COLUMNS));
+
+  // Default visible columns (exclude zones by default)
+  const defaultVisible = new Set(ALL_COLUMNS.filter(c => !c.startsWith('zone')));
+  const [visibleColumns, setVisibleColumns] = useState<Set<ColumnId>>(defaultVisible);
   const [columnOrder, setColumnOrder] = useState<ColumnId[]>(ALL_COLUMNS);
   const [isColumnMenuOpen, setIsColumnMenuOpen] = useState(false);
   const [draggedColumn, setDraggedColumn] = useState<ColumnId | null>(null);
@@ -226,7 +254,12 @@ export default function DetailedMetricsTable({ endDate, unit }: DetailedMetricsT
     return end;
   }, [endDate]);
 
-  const { activities, loading, error } = useStravaActivities(startDate, apiEndDate);
+  // Request zones if any zone column is visible
+  const includeZones = useMemo(() => {
+    return Array.from(visibleColumns).some(col => col.startsWith('zone'));
+  }, [visibleColumns]);
+
+  const { activities, loading, error } = useStravaActivities(startDate, apiEndDate, includeZones);
 
   const sortedActivities = useMemo(() => {
     let filtered = [...activities];
@@ -242,8 +275,22 @@ export default function DetailedMetricsTable({ endDate, unit }: DetailedMetricsT
       filtered = filtered.filter(a => !isActivityDisabled(a.id));
     }
 
+    // Pre-calculate zone times for sorting if needed
+    const activitiesWithZoneTimes = filtered.map(activity => {
+      const hrZone = activity.zones?.find((z: any) => z.type === 'heartrate');
+      const buckets = hrZone?.distribution_buckets || [];
+      return {
+        ...activity,
+        zone1Time: buckets[0]?.time || 0,
+        zone2Time: buckets[1]?.time || 0,
+        zone3Time: buckets[2]?.time || 0,
+        zone4Time: buckets[3]?.time || 0,
+        zone5Time: buckets[4]?.time || 0,
+      };
+    });
+
     // Apply sorting
-    filtered.sort((a, b) => {
+    activitiesWithZoneTimes.sort((a, b) => {
       let comparison = 0;
 
       switch (sortField) {
@@ -279,12 +326,27 @@ export default function DetailedMetricsTable({ endDate, unit }: DetailedMetricsT
         case 'cadence':
           comparison = (a.average_cadence || 0) - (b.average_cadence || 0);
           break;
+        case 'zone1':
+          comparison = a.zone1Time - b.zone1Time;
+          break;
+        case 'zone2':
+          comparison = a.zone2Time - b.zone2Time;
+          break;
+        case 'zone3':
+          comparison = a.zone3Time - b.zone3Time;
+          break;
+        case 'zone4':
+          comparison = a.zone4Time - b.zone4Time;
+          break;
+        case 'zone5':
+          comparison = a.zone5Time - b.zone5Time;
+          break;
       }
 
       return sortDirection === 'asc' ? comparison : -comparison;
     });
 
-    return filtered;
+    return activitiesWithZoneTimes;
   }, [activities, sortField, sortDirection, nameFilter, showDisabled, isActivityDisabled, unit]);
 
   const unitLabel = unit === 'kilometers' ? 'km' : 'mi';
@@ -423,6 +485,10 @@ export default function DetailedMetricsTable({ endDate, unit }: DetailedMetricsT
                 const aerobicEfficiency = calculateAerobicEfficiency(activity, unit);
                 const isDisabled = isActivityDisabled(activity.id);
 
+                // Get zone data
+                const hrZone = activity.zones?.find((z: any) => z.type === 'heartrate');
+                const buckets = hrZone?.distribution_buckets || [];
+
                 return (
                   <tr key={activity.id}>
                     {columnOrder.map(colId => {
@@ -505,6 +571,36 @@ export default function DetailedMetricsTable({ endDate, unit }: DetailedMetricsT
                           return (
                             <td key={colId} className={`px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300 text-right ${isDisabled ? 'line-through' : ''}`} style={{ fontFamily: monoFont }}>
                               {activity.average_cadence ? Math.round(activity.average_cadence * 2) : '-'}
+                            </td>
+                          );
+                        case 'zone1':
+                          return (
+                            <td key={colId} className={`px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300 text-right ${isDisabled ? 'line-through' : ''}`} style={{ fontFamily: monoFont }} title={buckets[0] ? formatTimeReadable(buckets[0].time) : '0s'}>
+                              {buckets[0] ? formatPercentage(buckets[0].time, activity.moving_time) : '-'}
+                            </td>
+                          );
+                        case 'zone2':
+                          return (
+                            <td key={colId} className={`px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300 text-right ${isDisabled ? 'line-through' : ''}`} style={{ fontFamily: monoFont }} title={buckets[1] ? formatTimeReadable(buckets[1].time) : '0s'}>
+                              {buckets[1] ? formatPercentage(buckets[1].time, activity.moving_time) : '-'}
+                            </td>
+                          );
+                        case 'zone3':
+                          return (
+                            <td key={colId} className={`px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300 text-right ${isDisabled ? 'line-through' : ''}`} style={{ fontFamily: monoFont }} title={buckets[2] ? formatTimeReadable(buckets[2].time) : '0s'}>
+                              {buckets[2] ? formatPercentage(buckets[2].time, activity.moving_time) : '-'}
+                            </td>
+                          );
+                        case 'zone4':
+                          return (
+                            <td key={colId} className={`px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300 text-right ${isDisabled ? 'line-through' : ''}`} style={{ fontFamily: monoFont }} title={buckets[3] ? formatTimeReadable(buckets[3].time) : '0s'}>
+                              {buckets[3] ? formatPercentage(buckets[3].time, activity.moving_time) : '-'}
+                            </td>
+                          );
+                        case 'zone5':
+                          return (
+                            <td key={colId} className={`px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300 text-right ${isDisabled ? 'line-through' : ''}`} style={{ fontFamily: monoFont }} title={buckets[4] ? formatTimeReadable(buckets[4].time) : '0s'}>
+                              {buckets[4] ? formatPercentage(buckets[4].time, activity.moving_time) : '-'}
                             </td>
                           );
                         default:
