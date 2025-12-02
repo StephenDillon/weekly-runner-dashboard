@@ -1,4 +1,4 @@
-import { StravaActivity, DetailedStravaActivity, HeartRateZones } from '../types/strava';
+import { StravaActivity, DetailedStravaActivity, HeartRateZones, StravaAthlete } from '../types/strava';
 import { StravaClient } from './stravaClient';
 
 export class StravaService {
@@ -85,7 +85,7 @@ export class StravaService {
         .filter(a => a.has_heartrate)
         .map(async (activity) => {
           const zones = await this.getActivityZones(activity.id);
-          
+
           return {
             ...activity,
             zones
@@ -94,5 +94,11 @@ export class StravaService {
     );
 
     return activitiesWithZones;
+  }
+  /**
+   * Get current athlete profile
+   */
+  async getAthlete(): Promise<StravaAthlete> {
+    return await this.client.fetchFromStrava<StravaAthlete>('/athlete');
   }
 }

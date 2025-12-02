@@ -10,15 +10,18 @@ import PaceAnalysisChart from "./components/PaceAnalysisChart";
 import DistanceAnalysisChart from "./components/DistanceAnalysisChart";
 import ConnectStrava from "./components/ConnectStrava";
 import EightyTwentyChart from "./components/EightyTwentyChart";
-import HeartRateAnalysis from "./components/HeartRateAnalysis";
+
+import RacesTab from "./components/RacesTab";
+import RaceCountdownCard from "./components/RaceCountdownCard";
 import { getLastFullWeek } from "./utils/dateUtils";
 import { useUnit } from "./context/UnitContext";
 import { useStravaAuth } from "./context/StravaAuthContext";
 import { useWeekStart } from "./context/WeekStartContext";
 import { useActivityType } from "./context/ActivityTypeContext";
 import { useHeartRateZones } from "./context/HeartRateZonesContext";
+import { useRaces } from "./hooks/useRaces";
 
-type TabType = 'dashboard' | 'detailed' | 'pace' | 'distance' | 'cadence' | 'heartRate';
+type TabType = 'dashboard' | 'detailed' | 'pace' | 'distance' | 'cadence' | 'races';
 
 export default function Home() {
   const { weekStartDay } = useWeekStart();
@@ -29,18 +32,19 @@ export default function Home() {
   const { activityType } = useActivityType();
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const { enabled: hrZonesEnabled } = useHeartRateZones();
+  const { races, addRace, removeRace } = useRaces();
 
   // Check for auth success in URL on mount
   useEffect(() => {
     const checkAuth = async () => {
       const params = new URLSearchParams(window.location.search);
       const authSuccess = params.get('auth');
-      
+
       if (authSuccess === 'success') {
         // Clean up URL
         window.history.replaceState({}, '', '/');
       }
-      
+
       // Always check auth status from server (cookies)
       try {
         const response = await fetch('/api/v1/auth/status');
@@ -53,7 +57,7 @@ export default function Home() {
         setIsCheckingAuth(false);
       }
     };
-    
+
     checkAuth();
   }, [setIsAuthenticated]);
 
@@ -92,76 +96,71 @@ export default function Home() {
       </div>
     );
   }
-  
+
   return (
     <div className="font-sans bg-linear-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
       <div className="max-w-7xl mx-auto py-4 sm:py-8 md:py-12 px-3 sm:px-4">
         <WeekSelector selectedWeek={selectedWeek} onWeekChange={setSelectedWeek} />
-        
+
         {/* Tab Navigation */}
         <div className="mb-6 border-b border-gray-200 dark:border-gray-700">
-          <nav className="-mb-px flex space-x-8">
+          <nav className="-mb-px flex space-x-8 min-w-max">
             <button
               onClick={() => setActiveTab('dashboard')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === 'dashboard'
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-              }`}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'dashboard'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                }`}
             >
               Dashboard
             </button>
             <button
               onClick={() => setActiveTab('detailed')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === 'detailed'
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-              }`}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'detailed'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                }`}
             >
               Activities
             </button>
             <button
               onClick={() => setActiveTab('pace')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === 'pace'
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-              }`}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'pace'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                }`}
             >
               Pace Analysis
             </button>
             <button
               onClick={() => setActiveTab('distance')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === 'distance'
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-              }`}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'distance'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                }`}
             >
               Distance Analysis
             </button>
             {activityType === 'running' && (
               <button
                 onClick={() => setActiveTab('cadence')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                  activeTab === 'cadence'
-                    ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-                }`}
+                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'cadence'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                  }`}
               >
                 Cadence
               </button>
             )}
+
             <button
-              onClick={() => setActiveTab('heartRate')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === 'heartRate'
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-              }`}
+              onClick={() => setActiveTab('races')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'races'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                }`}
             >
-              Heart Rate Analysis
+              Races
             </button>
           </nav>
         </div>
@@ -169,6 +168,13 @@ export default function Home() {
         {/* Tab Content */}
         {activeTab === 'dashboard' && (
           <>
+            {races.length > 0 && (
+              <div className="grid grid-cols-1 gap-4 sm:gap-6 md:gap-8 mb-4 sm:mb-6 md:mb-8">
+                {races.map((race) => (
+                  <RaceCountdownCard key={race.id} race={race} />
+                ))}
+              </div>
+            )}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 md:gap-8 mb-4 sm:mb-6 md:mb-8">
               <WeeklyMileageChart endDate={selectedWeek} unit={unit} />
               <LongestDistanceChart endDate={selectedWeek} unit={unit} />
@@ -206,8 +212,10 @@ export default function Home() {
           )
         )}
 
-        {activeTab === 'heartRate' && (
-          <HeartRateAnalysis endDate={selectedWeek} unit={unit} />
+
+
+        {activeTab === 'races' && (
+          <RacesTab races={races} onAddRace={addRace} onRemoveRace={removeRace} />
         )}
       </div>
     </div>

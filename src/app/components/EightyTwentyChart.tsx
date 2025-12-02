@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState, useRef } from 'react';
 import { getWeeksBack, formatWeekLabel, formatWeekTooltip } from '../utils/dateUtils';
-import { useActivitiesWithZones } from '../hooks/useActivitiesWithZones';
+import { useStravaActivities } from '../hooks/useStravaActivities';
 import { generateWeekStarts, metersToMiles } from '../utils/activityAggregation';
 import { useWeekStart } from '../context/WeekStartContext';
 import { useDisabledActivities } from '../context/DisabledActivitiesContext';
@@ -35,12 +35,12 @@ function formatTimeReadable(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
   const mins = Math.floor((seconds % 3600) / 60);
   const secs = Math.round(seconds % 60);
-  
+
   const parts = [];
   if (hours > 0) parts.push(`${hours} hour${hours !== 1 ? 's' : ''}`);
   if (mins > 0) parts.push(`${mins} min`);
   if (secs > 0 || parts.length === 0) parts.push(`${secs} sec`);
-  
+
   return parts.join(', ');
 }
 
@@ -50,7 +50,7 @@ export default function EightyTwentyChart({ endDate, unit }: EightyTwentyChartPr
   const { maxHeartRate, zones } = useHeartRateZones();
   const weeks = getWeeksBack(weeksToDisplay, endDate);
   const [hoveredWeek, setHoveredWeek] = useState<number | null>(null);
-  
+
   const startDate = useMemo(() => {
     const start = new Date(weeks[0]);
     start.setHours(0, 0, 0, 0);
@@ -64,7 +64,7 @@ export default function EightyTwentyChart({ endDate, unit }: EightyTwentyChartPr
     return end;
   }, [endDate]);
 
-  const { activities, loading, error } = useActivitiesWithZones(startDate, apiEndDate);
+  const { activities, loading, error } = useStravaActivities(startDate, apiEndDate, true);
 
   // Extract heart rate zones from the most recent activity with zone data
   const stravaZones = useMemo(() => {
@@ -91,19 +91,19 @@ export default function EightyTwentyChart({ endDate, unit }: EightyTwentyChartPr
       .filter(a => !disabledActivities.has(a.id))
       .filter(a => a.max_heartrate && a.max_heartrate > 0)
       .reduce((max, activity) => Math.max(max, activity.max_heartrate || 0), 0);
-    
+
     // If we have zones from Strava, use the max from the highest zone, otherwise use the max from activities
     if (stravaZones.length > 0) {
       const zoneMax = stravaZones[stravaZones.length - 1].max;
       return Math.max(maxFromActivities, zoneMax);
     }
-    
+
     return maxFromActivities > 0 ? maxFromActivities : maxHeartRate;
   }, [activities, disabledActivities, stravaZones, maxHeartRate]);
 
   const weeklyData = useMemo(() => {
     const weekStarts = generateWeekStarts(endDate, weeksToDisplay);
-    
+
     return weekStarts.map((weekStart) => {
       const weekEnd = new Date(weekStart);
       weekEnd.setDate(weekEnd.getDate() + 7);
@@ -128,10 +128,10 @@ export default function EightyTwentyChart({ endDate, unit }: EightyTwentyChartPr
       // Calculate easy (zones 1-2) vs hard (zones 3-5) miles based on actual zone distribution
       enabledActivities.forEach((activity) => {
         const distanceMiles = metersToMiles(activity.distance);
-        
+
         // Get heart rate zone distribution from Strava
         const hrZoneData = activity.zones?.find((z: any) => z.type === "heartrate")?.distribution_buckets || [];
-        
+
         if (hrZoneData.length === 0 || activity.moving_time === 0) {
           // No zone data available, skip this activity
           return;
@@ -181,7 +181,7 @@ export default function EightyTwentyChart({ endDate, unit }: EightyTwentyChartPr
       week: formatWeekLabel(date),
       weekTooltip: formatWeekTooltip(date, weekStartDay),
       weekStartDate: new Date(date),
-      easyMiles: unit === 'kilometers' 
+      easyMiles: unit === 'kilometers'
         ? milesToKm(weeklyData[index]?.easyMiles || 0)
         : (weeklyData[index]?.easyMiles || 0),
       hardMiles: unit === 'kilometers'
@@ -201,7 +201,7 @@ export default function EightyTwentyChart({ endDate, unit }: EightyTwentyChartPr
     // Reverse to show newest first
     return data.reverse();
   }, [weeks, weeklyData, unit, weekStartDay]);
-  
+
   const maxDistance = Math.max(...convertedData.map(d => d.totalMiles), 1);
   const unitLabel = unit === 'kilometers' ? 'km' : 'mi';
 
@@ -209,25 +209,25 @@ export default function EightyTwentyChart({ endDate, unit }: EightyTwentyChartPr
   const totalEasy = convertedData.reduce((sum, d) => sum + d.easyMiles, 0);
   const totalHard = convertedData.reduce((sum, d) => sum + d.hardMiles, 0);
   const total = totalEasy + totalHard;
-  
+
   // Calculate total time in each zone across all weeks
   const totalZone1Time = convertedData.reduce((sum, d) => sum + d.zone1Time, 0);
   const totalZone2Time = convertedData.reduce((sum, d) => sum + d.zone2Time, 0);
   const totalZone3Time = convertedData.reduce((sum, d) => sum + d.zone3Time, 0);
   const totalZone4Time = convertedData.reduce((sum, d) => sum + d.zone4Time, 0);
   const totalZone5Time = convertedData.reduce((sum, d) => sum + d.zone5Time, 0);
-  
+
   const totalEasyTime = totalZone1Time + totalZone2Time;
   const totalHardTime = totalZone3Time + totalZone4Time + totalZone5Time;
   const totalTime = totalEasyTime + totalHardTime;
-  
+
   // Calculate percentages based on TIME (not distance) to match the displayed totals
   const overallEasyPercent = totalTime > 0 ? (totalEasyTime / totalTime) * 100 : 0;
   const overallHardPercent = totalTime > 0 ? (totalHardTime / totalTime) * 100 : 0;
-  
+
   const easyTooltip = `Zone 1: ${formatTimeReadable(totalZone1Time)}\nZone 2: ${formatTimeReadable(totalZone2Time)}`;
   const hardTooltip = `Zone 3: ${formatTimeReadable(totalZone3Time)}\nZone 4: ${formatTimeReadable(totalZone4Time)}\nZone 5: ${formatTimeReadable(totalZone5Time)}`;
-  
+
   if (loading) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 flex flex-col h-full">
@@ -264,22 +264,22 @@ export default function EightyTwentyChart({ endDate, unit }: EightyTwentyChartPr
       <div className="space-y-2 sm:space-y-3 flex-1" style={{ minHeight: '250px' }}>
         {convertedData.map((data, index) => {
           const isHovered = hoveredWeek === index;
-          
+
           // Check if current date is within this week
           const now = new Date();
           const weekEnd = new Date(data.weekStartDate);
           weekEnd.setDate(weekEnd.getDate() + 7);
           const isCurrentWeek = now >= data.weekStartDate && now < weekEnd;
-          
+
           // Build tooltip with zone times
           const zoneTooltip = `Zone 1: ${formatTimeReadable(data.zone1Time)}\nZone 2: ${formatTimeReadable(data.zone2Time)}\nZone 3: ${formatTimeReadable(data.zone3Time)}\nZone 4: ${formatTimeReadable(data.zone4Time)}\nZone 5: ${formatTimeReadable(data.zone5Time)}`;
-          
+
           return (
             <div key={index} className="flex items-center gap-2 sm:gap-3 relative">
               <div className={`w-12 sm:w-20 text-[10px] sm:text-sm font-medium text-gray-600 dark:text-gray-300 cursor-help ${isCurrentWeek ? 'font-bold' : ''}`} title={data.weekTooltip}>
                 {isCurrentWeek ? 'Current Week' : data.week}
               </div>
-              <div 
+              <div
                 className="flex-1 relative h-6 sm:h-8 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700"
                 onMouseEnter={() => setHoveredWeek(index)}
                 onMouseLeave={() => setHoveredWeek(null)}
@@ -315,7 +315,7 @@ export default function EightyTwentyChart({ endDate, unit }: EightyTwentyChartPr
                     <span className="text-gray-400 dark:text-gray-500 text-xs">No HR data</span>
                   </div>
                 )}
-                
+
                 {/* Tooltip */}
                 {isHovered && data.totalMiles > 0 && (
                   <div className="absolute left-0 top-10 z-50 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg shadow-xl p-3 min-w-[200px]">
