@@ -169,7 +169,7 @@ export default function Home() {
         {activeTab === 'dashboard' && (
           <>
             {races.length > 0 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 md:gap-8 mb-4 sm:mb-6 md:mb-8">
+              <div className="grid grid-cols-1 gap-4 sm:gap-6 md:gap-8 mb-4 sm:mb-6 md:mb-8">
                 {races.map((race) => (
                   <RaceCountdownCard key={race.id} race={race} />
                 ))}

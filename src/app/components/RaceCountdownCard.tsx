@@ -38,17 +38,17 @@ export default function RaceCountdownCard({ race }: RaceCountdownCardProps) {
     const { weeks, days, isPast } = calculateTimeLeft();
 
     return (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 flex flex-col justify-between h-full border-l-4 border-blue-500">
-            <div>
-                <h3 className="text-lg font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
-                    Race Countdown
-                </h3>
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+        <div id="race-countdown-card" className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 flex flex-row justify-between items-center h-full border-l-4 border-blue-500">
+            <div className="flex flex-row items-baseline gap-3">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
                     {race.name}
                 </h2>
+                <div className="text-sm text-gray-400 dark:text-gray-500">
+                    {new Date(race.date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                </div>
             </div>
 
-            <div className="mt-auto">
+            <div>
                 {isPast ? (
                     <div className="text-xl font-semibold text-gray-500 dark:text-gray-400">
                         Race Completed
@@ -69,9 +69,6 @@ export default function RaceCountdownCard({ race }: RaceCountdownCardProps) {
                         </span>
                     </div>
                 )}
-                <div className="text-sm text-gray-400 dark:text-gray-500 mt-2">
-                    {new Date(race.date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                </div>
             </div>
         </div>
     );
