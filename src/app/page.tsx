@@ -4,24 +4,21 @@ import { useState, useEffect } from "react";
 import WeekSelector from "./components/WeekSelector";
 import WeeklyMileageChart from "./components/WeeklyMileageChart";
 import LongestDistanceChart from "./components/LongestDistanceChart";
-import AvgCadenceChart from "./components/AvgCadenceChart";
 import DetailedMetricsTable from "./components/DetailedMetricsTable";
-import PaceAnalysisChart from "./components/PaceAnalysisChart";
-import DistanceAnalysisChart from "./components/DistanceAnalysisChart";
 import ConnectStrava from "./components/ConnectStrava";
 import EightyTwentyChart from "./components/EightyTwentyChart";
 
 import RacesTab from "./components/RacesTab";
+import ChartsTab from "./components/ChartsTab";
 import RaceCountdownCard from "./components/RaceCountdownCard";
 import { getLastFullWeek } from "./utils/dateUtils";
 import { useUnit } from "./context/UnitContext";
 import { useStravaAuth } from "./context/StravaAuthContext";
 import { useWeekStart } from "./context/WeekStartContext";
-import { useActivityType } from "./context/ActivityTypeContext";
 import { useHeartRateZones } from "./context/HeartRateZonesContext";
 import { useRaces } from "./hooks/useRaces";
 
-type TabType = 'dashboard' | 'detailed' | 'pace' | 'distance' | 'cadence' | 'races';
+type TabType = 'dashboard' | 'detailed' | 'charts' | 'races';
 
 export default function Home() {
   const { weekStartDay } = useWeekStart();
@@ -29,7 +26,6 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const { unit } = useUnit();
   const { isAuthenticated, setIsAuthenticated } = useStravaAuth();
-  const { activityType } = useActivityType();
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const { enabled: hrZonesEnabled } = useHeartRateZones();
   const { races, addRace, removeRace } = useRaces();
@@ -104,10 +100,10 @@ export default function Home() {
 
         {/* Tab Navigation */}
         <div className="mb-6 border-b border-gray-200 dark:border-gray-700">
-          <nav className="-mb-px flex space-x-8 min-w-max">
+          <nav className="-mb-px flex space-x-8 min-w-max text-sm sm:text-base overflow-x-auto">
             <button
               onClick={() => setActiveTab('dashboard')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'dashboard'
+              className={`py-4 px-1 border-b-2 font-medium transition-colors whitespace-nowrap ${activeTab === 'dashboard'
                 ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
                 }`}
@@ -116,7 +112,7 @@ export default function Home() {
             </button>
             <button
               onClick={() => setActiveTab('detailed')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'detailed'
+              className={`py-4 px-1 border-b-2 font-medium transition-colors whitespace-nowrap ${activeTab === 'detailed'
                 ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
                 }`}
@@ -124,38 +120,17 @@ export default function Home() {
               Activities
             </button>
             <button
-              onClick={() => setActiveTab('pace')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'pace'
+              onClick={() => setActiveTab('charts')}
+              className={`py-4 px-1 border-b-2 font-medium transition-colors whitespace-nowrap ${activeTab === 'charts'
                 ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
                 }`}
             >
-              Pace Chart
+              Charts
             </button>
-            <button
-              onClick={() => setActiveTab('distance')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'distance'
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-                }`}
-            >
-              Distance Chart
-            </button>
-            {activityType === 'running' && (
-              <button
-                onClick={() => setActiveTab('cadence')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'cadence'
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-                  }`}
-              >
-                Cadence Chart
-              </button>
-            )}
-
             <button
               onClick={() => setActiveTab('races')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'races'
+              className={`py-4 px-1 border-b-2 font-medium transition-colors whitespace-nowrap ${activeTab === 'races'
                 ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
                 }`}
@@ -191,28 +166,9 @@ export default function Home() {
           <DetailedMetricsTable endDate={selectedWeek} unit={unit} />
         )}
 
-        {activeTab === 'pace' && (
-          <PaceAnalysisChart endDate={selectedWeek} unit={unit} />
+        {activeTab === 'charts' && (
+          <ChartsTab endDate={selectedWeek} unit={unit} />
         )}
-
-        {activeTab === 'distance' && (
-          <DistanceAnalysisChart endDate={selectedWeek} unit={unit} />
-        )}
-
-        {activeTab === 'cadence' && (
-          activityType === 'running' ? (
-            <AvgCadenceChart endDate={selectedWeek} unit={unit} />
-          ) : (
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-              <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white">Average Cadence</h2>
-              <div className="flex items-center justify-center py-12">
-                <div className="text-gray-500 dark:text-gray-400">Cadence data is only available for running activities</div>
-              </div>
-            </div>
-          )
-        )}
-
-
 
         {activeTab === 'races' && (
           <RacesTab races={races} onAddRace={addRace} onRemoveRace={removeRace} />

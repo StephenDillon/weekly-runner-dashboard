@@ -222,10 +222,6 @@ export default function DistanceAnalysisChart({ endDate, unit }: DistanceAnalysi
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 sm:p-6">
-      <h2 className="text-xl sm:text-2xl font-bold mb-6 text-gray-800 dark:text-white">
-        Distance Chart
-      </h2>
-
       <div className="space-y-6">
         {/* Chart */}
         <div className="relative">
