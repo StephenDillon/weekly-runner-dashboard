@@ -19,11 +19,11 @@ export function useConfig() {
 
 function ClientLayoutContent({ children }: { children: React.ReactNode }) {
   const [showConfig, setShowConfig] = useState(false);
-  
+
   return (
     <ConfigContext.Provider value={{ showConfig, setShowConfig }}>
       <Header onConfigToggle={() => setShowConfig(!showConfig)} showConfig={showConfig} />
-      <main className="grow font-sans bg-linear-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
+      <main className="grow font-sans">
         {children}
       </main>
     </ConfigContext.Provider>
