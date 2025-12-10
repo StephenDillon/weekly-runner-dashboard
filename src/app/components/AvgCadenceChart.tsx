@@ -1,59 +1,28 @@
 "use client";
 
 import React, { useMemo, useState, useRef } from 'react';
-import { getWeeksBack, formatWeekLabel, formatWeekTooltip } from '../utils/dateUtils';
+import { getWeeksBack, formatWeekLabel } from '../utils/dateUtils';
 import { useStravaActivities } from '../hooks/useStravaActivities';
-import { aggregateActivitiesByWeek, generateWeekStarts, metersToMiles } from '../utils/activityAggregation';
 import { useWeekStart } from '../context/WeekStartContext';
 import { useDisabledActivities } from '../context/DisabledActivitiesContext';
-import ActivityTooltipItem from './ActivityTooltipItem';
-import WeekActivitiesTooltip from './WeekActivitiesTooltip';
-
-interface CadenceData {
-  week: string;
-  weekTooltip: string;
-  cadence: number | null; // steps per minute
-}
+import SingleActivityTooltip from './SingleActivityTooltip';
 
 interface AvgCadenceChartProps {
   endDate: Date;
+  unit?: 'miles' | 'kilometers';
 }
 
-export default function AvgCadenceChart({ endDate }: AvgCadenceChartProps) {
-  const { weekStartDay, weeksToDisplay } = useWeekStart();
-  const { disabledActivities, toggleActivity, isActivityDisabled } = useDisabledActivities();
+export default function AvgCadenceChart({ endDate, unit = 'miles' }: AvgCadenceChartProps) {
+  const { weeksToDisplay } = useWeekStart();
+  const { isActivityDisabled, toggleActivity } = useDisabledActivities();
   const weeks = getWeeksBack(weeksToDisplay, endDate);
-  const [hoveredWeek, setHoveredWeek] = useState<number | null>(null);
-  const [lockedWeek, setLockedWeek] = useState<number | null>(null);
-  const tooltipRefs = useRef<(HTMLDivElement | null)[]>([]);
-  const barRefs = useRef<(HTMLDivElement | null)[]>([]);
 
-  const toggleWeek = (index: number) => {
-    if (lockedWeek === index) {
-      setLockedWeek(null);
-    } else {
-      // Close any open tooltip before opening the new one
-      setLockedWeek(index);
-    }
-  };
+  const [hoveredDot, setHoveredDot] = useState<number | null>(null);
+  const [clickedDot, setClickedDot] = useState<number | null>(null);
+  const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
+  const dotRefs = useRef<(SVGCircleElement | null)[]>([]);
+  const chartRef = useRef<HTMLDivElement>(null);
 
-  const handleMouseEnter = (index: number) => {
-    if (lockedWeek === null) {
-      setHoveredWeek(index);
-    }
-  };
-
-  const handleMouseLeave = () => {
-    if (lockedWeek === null) {
-      setHoveredWeek(null);
-    }
-  };
-
-  const isOpen = (index: number) => {
-    return lockedWeek === index || (lockedWeek === null && hoveredWeek === index);
-  };
-  
-  // Calculate date range for API call
   const startDate = useMemo(() => {
     const start = new Date(weeks[0]);
     start.setHours(0, 0, 0, 0);
@@ -69,30 +38,151 @@ export default function AvgCadenceChart({ endDate }: AvgCadenceChartProps) {
 
   const { activities, loading, error } = useStravaActivities(startDate, apiEndDate);
 
-  const weeklyMetrics = useMemo(() => {
-    const weekStarts = generateWeekStarts(endDate, weeksToDisplay);
-    return aggregateActivitiesByWeek(activities, weekStarts, disabledActivities);
-  }, [activities, endDate, disabledActivities, weeksToDisplay]);
+  const sortedActivities = useMemo(() => {
+    return [...activities]
+      .filter(activity => (activity.average_cadence || 0) > 0 && !isActivityDisabled(activity.id))
+      .sort((a, b) =>
+        new Date(a.start_date).getTime() - new Date(b.start_date).getTime()
+      );
+  }, [activities, isActivityDisabled]);
 
-  const chartData: CadenceData[] = useMemo(() => {
-    return weeks.map((date, index) => ({
-      week: formatWeekLabel(date),
-      weekTooltip: formatWeekTooltip(date, weekStartDay),
-      cadence: weeklyMetrics[index]?.averageCadence || null
+  const cadenceData = useMemo(() => {
+    return sortedActivities.map(activity => ({
+      name: activity.name,
+      date: formatWeekLabel(new Date(activity.start_date)),
+      cadence: (activity.average_cadence || 0) * 2, // Convert to SPM (steps per minute)
+      id: activity.id,
+      timestamp: new Date(activity.start_date).getTime()
     }));
-  }, [weeks, weeklyMetrics, weekStartDay]);
+  }, [sortedActivities]);
 
-  const validCadences = chartData.filter(d => d.cadence !== null).map(d => d.cadence!);
-  const minCadence = validCadences.length > 0 ? Math.min(...validCadences) : 0;
-  const maxCadence = validCadences.length > 0 ? Math.max(...validCadences) : 200;
-  const range = maxCadence - minCadence;
-  
+  // Generate week labels specifically for time-based axis
+  const weekLabels = useMemo(() => {
+    return weeks.map(weekStart => ({
+      date: weekStart,
+      label: formatWeekLabel(weekStart),
+      timestamp: weekStart.getTime()
+    }));
+  }, [weeks]);
+
+  // Calculate scaled X position based on time
+  const minTime = startDate.getTime();
+  const maxTime = apiEndDate.getTime();
+  const timeRange = maxTime - minTime;
+
+  const getXPosition = (timestamp: number) => {
+    const pos = ((timestamp - minTime) / timeRange) * 90 + 5;
+    return Math.max(0, Math.min(100, pos)); // Ensure within bounds
+  };
+
+  // Calculate min and max cadence for scaling
+  const { minCadence, maxCadence } = useMemo(() => {
+    if (cadenceData.length === 0) return { minCadence: 140, maxCadence: 200 };
+
+    const cadences = cadenceData.map(d => d.cadence);
+    const min = Math.min(...cadences);
+    const max = Math.max(...cadences);
+
+    // Add some padding to the range
+    const padding = (max - min) * 0.1;
+    return {
+      minCadence: Math.max(0, min - padding),
+      maxCadence: max + padding
+    };
+  }, [cadenceData]);
+
+  // Calculate linear regression for trend line against time
+  const trendLine = useMemo(() => {
+    if (cadenceData.length < 2) return null;
+
+    const n = cadenceData.length;
+    let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+
+    // Normalize time to days from start
+    const normalizeTime = (t: number) => (t - minTime) / (24 * 60 * 60 * 1000);
+
+    cadenceData.forEach((data) => {
+      const x = normalizeTime(data.timestamp);
+      sumX += x;
+      sumY += data.cadence;
+      sumXY += x * data.cadence;
+      sumX2 += x * x;
+    });
+
+    const denominator = n * sumX2 - sumX * sumX;
+    if (denominator === 0) return null;
+
+    const slope = (n * sumXY - sumX * sumY) / denominator;
+    const intercept = (sumY - slope * sumX) / n;
+
+    const startX = normalizeTime(minTime);
+    const endX = normalizeTime(maxTime);
+
+    const startY = slope * startX + intercept;
+    const endY = slope * endX + intercept;
+
+    return { slope, intercept, startY, endY };
+  }, [cadenceData, minTime, maxTime]);
+
+  const updateTooltipPosition = (index: number, event: React.MouseEvent<SVGCircleElement>) => {
+    if (chartRef.current) {
+      const svgElement = event.currentTarget.ownerSVGElement;
+      if (svgElement) {
+        const svgRect = svgElement.getBoundingClientRect();
+        const circle = event.currentTarget;
+        const cx = parseFloat(circle.getAttribute('cx') || '0');
+        const cy = parseFloat(circle.getAttribute('cy') || '0');
+
+        // Convert percentage to pixels
+        const xPos = (cx / 100) * svgRect.width;
+        const yPos = (cy / 100) * svgRect.height;
+
+        setTooltipPosition({
+          x: xPos,
+          y: yPos
+        });
+      }
+    }
+  };
+
+  const handleDotHover = (index: number, event: React.MouseEvent<SVGCircleElement>) => {
+    if (clickedDot === null) {
+      setHoveredDot(index);
+      updateTooltipPosition(index, event);
+    }
+  };
+
+  const handleDotClick = (index: number, event: React.MouseEvent<SVGCircleElement>) => {
+    event.stopPropagation();
+    if (clickedDot === index) {
+      setClickedDot(null);
+      setTooltipPosition(null);
+    } else {
+      setClickedDot(index);
+      setHoveredDot(null);
+      updateTooltipPosition(index, event);
+    }
+  };
+
+  const handleDotLeave = () => {
+    if (clickedDot === null) {
+      setHoveredDot(null);
+      setTooltipPosition(null);
+    }
+  };
+
+  const handleCloseTooltip = () => {
+    setClickedDot(null);
+    setHoveredDot(null);
+    setTooltipPosition(null);
+  };
+
   if (loading) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 sm:p-6">
-        <h2 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 text-gray-800 dark:text-white">Average Cadence</h2>
-        <div className="flex items-center justify-center" style={{ height: '350px' }}>
-          <div className="text-gray-500 dark:text-gray-400">Loading activities...</div>
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+        <h2 className="text-xl sm:text-2xl font-bold mb-4 text-gray-800 dark:text-white">Cadence Chart</h2>
+        <div className="flex items-center justify-center py-12">
+          <div className="text-gray-500 dark:text-gray-400">Loading cadence data...</div>
         </div>
       </div>
     );
@@ -100,86 +190,203 @@ export default function AvgCadenceChart({ endDate }: AvgCadenceChartProps) {
 
   if (error) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 sm:p-6">
-        <h2 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 text-gray-800 dark:text-white">Average Cadence</h2>
-        <div className="flex items-center justify-center" style={{ height: '350px' }}>
-          <div className="text-red-500">Error loading activities: {error}</div>
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+        <h2 className="text-xl sm:text-2xl font-bold mb-4 text-gray-800 dark:text-white">Cadence Chart</h2>
+        <div className="flex items-center justify-center py-12">
+          <div className="text-red-500">Error loading cadence data: {error}</div>
         </div>
       </div>
     );
   }
-  
-  return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 sm:p-6">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-3 sm:mb-4 gap-1 sm:gap-0">
-        <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-white">Average Cadence</h2>
-        <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 italic">Tap bar to view activities</span>
-      </div>
-      <div className="relative bg-gray-50 dark:bg-gray-900 rounded-lg p-2 sm:p-4 pt-6 sm:pt-8" style={{ minHeight: '350px', height: '350px' }}>
-        <div className="h-full flex items-end justify-around gap-1 sm:gap-2">
-          {chartData.map((data, index) => {
-            const heightPercent = data.cadence && range > 0
-              ? ((data.cadence - minCadence) / range) * 85 + 10
-              : 10;
-            const weekActivities = weeklyMetrics[index]?.activities || [];
-            
-            return (
-              <div 
-                ref={(el) => { barRefs.current[index] = el; }}
-                key={index} 
-                className="flex flex-col items-center flex-1 h-full justify-end relative"
-                onClick={() => toggleWeek(index)}
-                onMouseEnter={() => handleMouseEnter(index)}
-                onMouseLeave={handleMouseLeave}
-              >
-                <div className="relative flex items-end justify-center w-full" style={{ height: `${heightPercent}%` }}>
-                  {data.cadence !== null && (
-                    <div className="absolute -top-4 sm:-top-6 left-1/2 transform -translate-x-1/2 text-[9px] sm:text-xs font-semibold text-gray-700 dark:text-gray-200 whitespace-nowrap z-10">
-                      {Math.round(data.cadence)}
-                    </div>
-                  )}
-                  {data.cadence !== null ? (
-                    <div
-                      className="bg-linear-to-t from-green-500 to-emerald-400 rounded-t-lg w-full transition-all duration-500 hover:opacity-80 h-full cursor-pointer"
-                    >
-                    </div>
-                  ) : (
-                    <div className="text-[9px] sm:text-xs text-gray-400 dark:text-gray-500">-</div>
-                  )}
-                </div>
-                
-                {isOpen(index) && weekActivities.length > 0 && (
-                  <div ref={(el) => { tooltipRefs.current[index] = el; }}>
-                    <WeekActivitiesTooltip
-                      activities={weekActivities}
-                      onClose={() => setLockedWeek(null)}
-                      isActivityDisabled={isActivityDisabled}
-                      onToggleActivity={toggleActivity}
-                      unit="miles"
-                      showCadence={true}
-                    />
-                  </div>
-                )}
-                
-                <div className="text-[9px] sm:text-xs font-medium text-gray-600 dark:text-gray-300 mt-1 sm:mt-2 cursor-help text-center" title={data.weekTooltip}>
-                  {data.week}
-                </div>
-              </div>
-            );
-          })}
+
+  if (cadenceData.length === 0) {
+    return (
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+        <h2 className="text-xl sm:text-2xl font-bold mb-4 text-gray-800 dark:text-white">Cadence Chart</h2>
+        <div className="flex items-center justify-center py-12">
+          <div className="text-gray-500 dark:text-gray-400">No activities with cadence data available</div>
         </div>
       </div>
-      <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-gray-200 dark:border-gray-700 min-h-12 sm:min-h-14">
-        <div className="flex flex-col sm:flex-row justify-between gap-1 sm:gap-0 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-          {validCadences.length > 0 ? (
-            <>
-              <span>Min: <strong className="text-gray-800 dark:text-white">{Math.round(minCadence)} spm</strong></span>
-              <span>Avg: <strong className="text-gray-800 dark:text-white">{Math.round(validCadences.reduce((sum, c) => sum + c, 0) / validCadences.length)} spm</strong></span>
-              <span>Max: <strong className="text-gray-800 dark:text-white">{Math.round(maxCadence)} spm</strong></span>
-            </>
-          ) : (
-            <span className="text-gray-500">No cadence data available</span>
-          )}
+    );
+  }
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 sm:p-6">
+      <h2 className="text-xl sm:text-2xl font-bold mb-6 text-gray-800 dark:text-white">
+        Cadence Chart
+      </h2>
+
+      <div className="space-y-6">
+        {/* Chart */}
+        <div className="relative">
+          <div className="flex">
+            {/* Y-axis labels */}
+            <div className="flex flex-col justify-between h-[350px] sm:h-[500px] text-xs text-gray-500 dark:text-gray-400 pr-2 py-2">
+              {[1, 0.75, 0.5, 0.25, 0].map((percent, idx) => {
+                const val = minCadence + (maxCadence - minCadence) * percent;
+                return (
+                  <div key={idx} className="text-right w-8 sm:w-16">
+                    {Math.round(val)}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Chart area */}
+            <div ref={chartRef} className="flex-1 relative h-[350px] sm:h-[500px] border-l border-b border-gray-300 dark:border-gray-600 pb-8 sm:pb-20">
+              <svg className="absolute inset-0 w-full h-full" style={{ overflow: 'visible' }}>
+                {/* Horizontal grid lines */}
+                {[0, 0.25, 0.5, 0.75, 1].map((percent, idx) => (
+                  <line
+                    key={idx}
+                    x1="0%"
+                    y1={`${percent * 100}%`}
+                    x2="100%"
+                    y2={`${percent * 100}%`}
+                    stroke="currentColor"
+                    strokeWidth="1"
+                    className="text-gray-200 dark:text-gray-700"
+                    strokeDasharray="4 4"
+                  />
+                ))}
+
+                {/* Trend line */}
+                {trendLine && (
+                  <line
+                    x1="5%"
+                    y1={`${95 - (((trendLine.startY - minCadence) / (maxCadence - minCadence)) * 85)}%`}
+                    x2="95%"
+                    y2={`${95 - (((trendLine.endY - minCadence) / (maxCadence - minCadence)) * 85)}%`}
+                    stroke={trendLine.slope > 0 ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)'} // Increasing cadence usually good
+                    strokeWidth="2"
+                    strokeDasharray="8 4"
+                    className="opacity-60"
+                  />
+                )}
+
+                {/* Connect dots with line */}
+                <polyline
+                  points={cadenceData.map((data) => {
+                    const x = getXPosition(data.timestamp);
+                    const y = 95 - (((data.cadence - minCadence) / (maxCadence - minCadence)) * 85);
+                    return `${x}%,${y}%`;
+                  }).join(' ')}
+                  fill="none"
+                  stroke="rgb(16, 185, 129)" // emerald-500
+                  strokeWidth="3"
+                  className="transition-all"
+                />
+
+                {/* Draw dots */}
+                {cadenceData.map((data, index) => {
+                  const xPercent = getXPosition(data.timestamp);
+                  const yPercent = 95 - (((data.cadence - minCadence) / (maxCadence - minCadence)) * 85);
+
+                  return (
+                    <g key={index}>
+                      <circle
+                        ref={(el) => { dotRefs.current[index] = el; }}
+                        cx={`${xPercent}%`}
+                        cy={`${yPercent}%`}
+                        r="6"
+                        fill="rgb(16, 185, 129)" // emerald-500
+                        className="cursor-pointer transition-all hover:r-8"
+                        style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))' }}
+                        onClick={(e) => handleDotClick(index, e)}
+                        onMouseEnter={(e) => handleDotHover(index, e)}
+                        onMouseLeave={handleDotLeave}
+                      />
+                      {/* Invisible larger circle for better hover target */}
+                      <circle
+                        cx={`${xPercent}%`}
+                        cy={`${yPercent}%`}
+                        r="15"
+                        fill="transparent"
+                        className="cursor-pointer"
+                        onClick={(e) => handleDotClick(index, e)}
+                        onMouseEnter={(e) => handleDotHover(index, e)}
+                        onMouseLeave={handleDotLeave}
+                      />
+                    </g>
+                  );
+                })}
+              </svg>
+
+              {/* Tooltip */}
+              {(clickedDot !== null || hoveredDot !== null) && tooltipPosition && sortedActivities[clickedDot ?? hoveredDot ?? 0] && (
+                <div
+                  className="absolute z-50 pointer-events-auto"
+                  style={{
+                    left: `${tooltipPosition.x}px`,
+                    top: `${tooltipPosition.y}px`,
+                    transform: 'translate(-50%, -100%) translateY(-10px)'
+                  }}
+                >
+                  <SingleActivityTooltip
+                    activity={sortedActivities[clickedDot ?? hoveredDot ?? 0]}
+                    onClose={handleCloseTooltip}
+                    isActivityDisabled={isActivityDisabled}
+                    onToggleActivity={toggleActivity}
+                    unit={unit}
+                    showCadence={true}
+                  />
+                </div>
+              )}
+
+              {/* X-axis labels */}
+              <div className="absolute inset-x-0 bottom-0 overflow-hidden h-6 sm:h-8">
+                {weekLabels.map((week, index) => {
+                  const xPercent = getXPosition(week.timestamp);
+
+                  return (
+                    <div
+                      key={index}
+                      className="absolute text-[10px] sm:text-xs text-gray-600 dark:text-gray-400 text-center whitespace-nowrap"
+                      style={{
+                        left: `${xPercent}%`,
+                        bottom: '0',
+                        transform: 'translateX(-50%)' // Center the label
+                      }}
+                    >
+                      {week.label}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Summary Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="text-center">
+            <div className="text-sm text-gray-500 dark:text-gray-400">Low Cadence</div>
+            <div className="text-xl font-bold text-gray-600 dark:text-gray-300">
+              {cadenceData.length > 0 ? Math.round(Math.min(...cadenceData.map(d => d.cadence))) : 'N/A'} spm
+            </div>
+          </div>
+          <div className="text-center">
+            <div className="text-sm text-gray-500 dark:text-gray-400">High Cadence</div>
+            <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
+              {cadenceData.length > 0 ? Math.round(Math.max(...cadenceData.map(d => d.cadence))) : 'N/A'} spm
+            </div>
+          </div>
+          <div className="text-center">
+            <div className="text-sm text-gray-500 dark:text-gray-400">Avg Cadence</div>
+            <div className="text-xl font-bold text-blue-600 dark:text-blue-400">
+              {cadenceData.length > 0 ? Math.round(cadenceData.reduce((sum, d) => sum + d.cadence, 0) / cadenceData.length) : 'N/A'} spm
+            </div>
+          </div>
+          <div className="text-center">
+            <div className="text-sm text-gray-500 dark:text-gray-400">Cadence Trend</div>
+            <div className={`text-xl font-bold ${trendLine && trendLine.slope > 0 ? 'text-green-600 dark:text-green-400' : 'text-yellow-600 dark:text-yellow-400'}`}>
+              {trendLine ? (
+                <>
+                  {trendLine.slope > 0 ? '↑ Increasing' : '↓ Decreasing'}
+                </>
+              ) : 'N/A'}
+            </div>
+          </div>
         </div>
       </div>
     </div>

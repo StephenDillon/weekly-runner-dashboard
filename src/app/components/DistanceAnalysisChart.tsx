@@ -17,7 +17,7 @@ interface DistanceAnalysisChartProps {
 const milesToKm = (miles: number) => miles * 1.60934;
 
 export default function DistanceAnalysisChart({ endDate, unit }: DistanceAnalysisChartProps) {
-  const { weekStartDay, weeksToDisplay } = useWeekStart();
+  const { weeksToDisplay } = useWeekStart();
   const { activityType } = useActivityType();
   const { isActivityDisabled, toggleActivity } = useDisabledActivities();
   const weeks = getWeeksBack(weeksToDisplay, endDate);
@@ -26,7 +26,7 @@ export default function DistanceAnalysisChart({ endDate, unit }: DistanceAnalysi
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
   const dotRefs = useRef<(SVGCircleElement | null)[]>([]);
   const chartRef = useRef<HTMLDivElement>(null);
-  
+
   const startDate = useMemo(() => {
     const start = new Date(weeks[0]);
     start.setHours(0, 0, 0, 0);
@@ -45,7 +45,7 @@ export default function DistanceAnalysisChart({ endDate, unit }: DistanceAnalysi
   const sortedActivities = useMemo(() => {
     return [...activities]
       .filter(activity => !isActivityDisabled(activity.id))
-      .sort((a, b) => 
+      .sort((a, b) =>
         new Date(a.start_date).getTime() - new Date(b.start_date).getTime()
       );
   }, [activities, isActivityDisabled]);
@@ -54,56 +54,42 @@ export default function DistanceAnalysisChart({ endDate, unit }: DistanceAnalysi
     return sortedActivities.map(activity => {
       const distance = metersToMiles(activity.distance);
       const convertedDistance = unit === 'kilometers' ? milesToKm(distance) : distance;
-      
+
       return {
         name: activity.name,
         distance: convertedDistance,
-        activityDate: new Date(activity.start_date)
+        activityDate: new Date(activity.start_date),
+        timestamp: new Date(activity.start_date).getTime()
       };
     });
   }, [sortedActivities, unit]);
 
-  // Generate week labels based on the week start day
+  // Generate week labels specifically for time-based axis
   const weekLabels = useMemo(() => {
-    if (distanceData.length === 0) return [];
-    
-    const labels: { index: number; label: string }[] = [];
-    let currentWeekStart: Date | null = null;
-    
-    // Convert weekStartDay string to number (0 = Sunday, 1 = Monday, etc.)
-    const weekStartDayNum = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].indexOf(weekStartDay);
-    
-    distanceData.forEach((data, index) => {
-      const activityDate = data.activityDate;
-      
-      // Calculate the start of the week for this activity
-      const weekStart = new Date(activityDate);
-      const dayOfWeek = weekStart.getDay();
-      const daysToSubtract = (dayOfWeek - weekStartDayNum + 7) % 7;
-      weekStart.setDate(weekStart.getDate() - daysToSubtract);
-      weekStart.setHours(0, 0, 0, 0);
-      
-      // If this is a new week, add a label
-      if (!currentWeekStart || weekStart.getTime() !== currentWeekStart.getTime()) {
-        currentWeekStart = new Date(weekStart);
-        labels.push({
-          index,
-          label: formatWeekLabel(weekStart)
-        });
-      }
-    });
-    
-    return labels;
-  }, [distanceData, weekStartDay]);
+    return weeks.map(weekStart => ({
+      date: weekStart,
+      label: formatWeekLabel(weekStart),
+      timestamp: weekStart.getTime()
+    }));
+  }, [weeks]);
+
+  // Calculate scaled X position based on time
+  const minTime = startDate.getTime();
+  const maxTime = apiEndDate.getTime();
+  const timeRange = maxTime - minTime;
+
+  const getXPosition = (timestamp: number) => {
+    return ((timestamp - minTime) / timeRange) * 90 + 5;
+  };
 
   // Calculate min and max distance for scaling
   const { minDistance, maxDistance } = useMemo(() => {
     if (distanceData.length === 0) return { minDistance: 0, maxDistance: 10 };
-    
+
     const distances = distanceData.map(d => d.distance);
     const min = Math.min(...distances);
     const max = Math.max(...distances);
-    
+
     // Add 10% padding
     const padding = (max - min) * 0.1;
     return {
@@ -112,29 +98,39 @@ export default function DistanceAnalysisChart({ endDate, unit }: DistanceAnalysi
     };
   }, [distanceData]);
 
-  // Calculate trend line using linear regression
+  // Calculate trend line using temporal linear regression
   const trendLine = useMemo(() => {
     if (distanceData.length < 2) return null;
-    
+
     const n = distanceData.length;
     let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
-    
-    distanceData.forEach((data, index) => {
-      sumX += index;
+
+    // Normalize time to days from start for numerical stability
+    const normalizeTime = (t: number) => (t - minTime) / (24 * 60 * 60 * 1000);
+
+    distanceData.forEach((data) => {
+      const x = normalizeTime(data.timestamp);
+      sumX += x;
       sumY += data.distance;
-      sumXY += index * data.distance;
-      sumX2 += index * index;
+      sumXY += x * data.distance;
+      sumX2 += x * x;
     });
-    
-    const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+
+    const denominator = (n * sumX2 - sumX * sumX);
+    if (denominator === 0) return null;
+
+    const slope = (n * sumXY - sumX * sumY) / denominator;
     const intercept = (sumY - slope * sumX) / n;
-    
-    // Calculate Y positions for start and end of trend line
-    const startY = intercept;
-    const endY = slope * (n - 1) + intercept;
-    
+
+    // Calculate start and end distances for the full range
+    const startX = normalizeTime(minTime);
+    const endX = normalizeTime(maxTime);
+
+    const startY = slope * startX + intercept;
+    const endY = slope * endX + intercept;
+
     return { slope, intercept, startY, endY };
-  }, [distanceData]);
+  }, [distanceData, minTime, maxTime]);
 
   const updateTooltipPosition = (index: number, event: React.MouseEvent<SVGCircleElement>) => {
     if (chartRef.current) {
@@ -144,11 +140,11 @@ export default function DistanceAnalysisChart({ endDate, unit }: DistanceAnalysi
         const circle = event.currentTarget;
         const cx = parseFloat(circle.getAttribute('cx') || '0');
         const cy = parseFloat(circle.getAttribute('cy') || '0');
-        
+
         // Convert percentage to pixels
         const xPos = (cx / 100) * svgRect.width;
         const yPos = (cy / 100) * svgRect.height;
-        
+
         setTooltipPosition({
           x: xPos,
           y: yPos
@@ -158,7 +154,6 @@ export default function DistanceAnalysisChart({ endDate, unit }: DistanceAnalysi
   };
 
   const handleDotHover = (index: number, event: React.MouseEvent<SVGCircleElement>) => {
-    // Only show hover tooltip if no dot is clicked (persistent)
     if (clickedDot === null) {
       setHoveredDot(index);
       updateTooltipPosition(index, event);
@@ -168,19 +163,16 @@ export default function DistanceAnalysisChart({ endDate, unit }: DistanceAnalysi
   const handleDotClick = (index: number, event: React.MouseEvent<SVGCircleElement>) => {
     event.stopPropagation();
     if (clickedDot === index) {
-      // Clicking the same dot closes it
       setClickedDot(null);
       setTooltipPosition(null);
     } else {
-      // Click makes it persistent
       setClickedDot(index);
-      setHoveredDot(null); // Clear hover state
+      setHoveredDot(null);
       updateTooltipPosition(index, event);
     }
   };
 
   const handleDotLeave = () => {
-    // Only clear hover tooltip if no dot is clicked
     if (clickedDot === null) {
       setHoveredDot(null);
       setTooltipPosition(null);
@@ -196,7 +188,7 @@ export default function DistanceAnalysisChart({ endDate, unit }: DistanceAnalysi
   if (loading) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-        <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white">Distance Analysis</h2>
+        <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white">Distance Chart</h2>
         <div className="flex items-center justify-center py-12">
           <div className="text-gray-500 dark:text-gray-400">Loading distance data...</div>
         </div>
@@ -207,7 +199,7 @@ export default function DistanceAnalysisChart({ endDate, unit }: DistanceAnalysi
   if (error) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-        <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white">Distance Analysis</h2>
+        <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white">Distance Chart</h2>
         <div className="flex items-center justify-center py-12">
           <div className="text-red-500">Error loading distance data: {error}</div>
         </div>
@@ -215,10 +207,12 @@ export default function DistanceAnalysisChart({ endDate, unit }: DistanceAnalysi
     );
   }
 
+  const unitLabel = unit === 'kilometers' ? 'km' : 'mi';
+
   if (distanceData.length === 0) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-        <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white">Distance Analysis</h2>
+        <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white">Distance Chart</h2>
         <div className="flex items-center justify-center py-12">
           <div className="text-gray-500 dark:text-gray-400">No activities with distance data available</div>
         </div>
@@ -226,14 +220,12 @@ export default function DistanceAnalysisChart({ endDate, unit }: DistanceAnalysi
     );
   }
 
-  const unitLabel = unit === 'kilometers' ? 'km' : 'mi';
-
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 sm:p-6">
       <h2 className="text-xl sm:text-2xl font-bold mb-6 text-gray-800 dark:text-white">
-        Distance Analysis
+        Distance Chart
       </h2>
-      
+
       <div className="space-y-6">
         {/* Chart */}
         <div className="relative">
@@ -249,7 +241,7 @@ export default function DistanceAnalysisChart({ endDate, unit }: DistanceAnalysi
                 );
               })}
             </div>
-            
+
             {/* Chart area */}
             <div ref={chartRef} className="flex-1 relative h-[500px] border-l border-b border-gray-300 dark:border-gray-600 pb-20">
               <svg className="absolute inset-0 w-full h-full" style={{ overflow: 'visible' }}>
@@ -284,8 +276,8 @@ export default function DistanceAnalysisChart({ endDate, unit }: DistanceAnalysi
 
                 {/* Line connecting all data points */}
                 <polyline
-                  points={distanceData.map((data, index) => {
-                    const xPercent = ((index / Math.max(distanceData.length - 1, 1)) * 90) + 5;
+                  points={distanceData.map((data) => {
+                    const xPercent = getXPosition(data.timestamp);
                     const yPercent = 95 - (((data.distance - minDistance) / (maxDistance - minDistance)) * 85);
                     return `${xPercent}%,${yPercent}%`;
                   }).join(' ')}
@@ -296,9 +288,9 @@ export default function DistanceAnalysisChart({ endDate, unit }: DistanceAnalysi
 
                 {/* Data points */}
                 {distanceData.map((data, index) => {
-                  const xPercent = ((index / Math.max(distanceData.length - 1, 1)) * 90) + 5;
+                  const xPercent = getXPosition(data.timestamp);
                   const yPercent = 95 - (((data.distance - minDistance) / (maxDistance - minDistance)) * 85);
-                  
+
                   return (
                     <g key={index}>
                       <circle
@@ -328,11 +320,11 @@ export default function DistanceAnalysisChart({ endDate, unit }: DistanceAnalysi
                   );
                 })}
               </svg>
-              
-              {/* Tooltip - Rendered outside SVG for proper z-index */}
+
+              {/* Tooltip */}
               {(clickedDot !== null || hoveredDot !== null) && tooltipPosition && sortedActivities[clickedDot ?? hoveredDot ?? 0] && (
-                <div 
-                  className="absolute z-9999 pointer-events-auto"
+                <div
+                  className="absolute z-50 pointer-events-auto"
                   style={{
                     left: `${tooltipPosition.x}px`,
                     top: `${tooltipPosition.y}px`,
@@ -349,23 +341,23 @@ export default function DistanceAnalysisChart({ endDate, unit }: DistanceAnalysi
                   />
                 </div>
               )}
-              
-              {/* X-axis labels - Show week labels only */}
+
+              {/* X-axis labels - Show week labels from time domain */}
               <div className="absolute inset-x-0 bottom-0">
-                {weekLabels.map((label) => {
-                  const xPercent = ((label.index / Math.max(distanceData.length - 1, 1)) * 90) + 5;
-                  
+                {weekLabels.map((week, index) => {
+                  const xPercent = getXPosition(week.timestamp);
+
                   return (
-                    <div 
-                      key={label.index}
+                    <div
+                      key={index}
                       className="absolute text-xs text-gray-600 dark:text-gray-400 text-center"
-                      style={{ 
+                      style={{
                         left: `${xPercent}%`,
                         bottom: '0',
                         transform: 'translateX(-50%)'
                       }}
                     >
-                      {label.label}
+                      {week.label}
                     </div>
                   );
                 })}

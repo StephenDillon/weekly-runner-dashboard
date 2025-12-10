@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState, useRef } from 'react';
-import { getWeeksBack } from '../utils/dateUtils';
+import { getWeeksBack, formatWeekLabel } from '../utils/dateUtils';
 import { useStravaActivities } from '../hooks/useStravaActivities';
 import { metersToMiles } from '../utils/activityAggregation';
 import { useWeekStart } from '../context/WeekStartContext';
@@ -16,21 +16,13 @@ interface PaceAnalysisChartProps {
 
 const milesToKm = (miles: number) => miles * 1.60934;
 
-function formatDate(dateString: string): string {
-  const date = new Date(dateString);
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const month = monthNames[date.getMonth()];
-  const day = date.getDate().toString().padStart(2, '0');
-  return `${month} ${day}`;
-}
-
 function formatPace(metersPerSecond: number, unit: 'miles' | 'kilometers'): string {
   if (metersPerSecond === 0 || !isFinite(metersPerSecond)) return 'N/A';
-  
-  const minutesPerUnit = unit === 'kilometers' 
+
+  const minutesPerUnit = unit === 'kilometers'
     ? 16.6667 / metersPerSecond  // minutes per km
     : 26.8224 / metersPerSecond; // minutes per mile
-    
+
   const mins = Math.floor(minutesPerUnit);
   const secs = Math.round((minutesPerUnit - mins) * 60);
   return `${mins}:${secs.toString().padStart(2, '0')}`;
@@ -46,7 +38,7 @@ export default function PaceAnalysisChart({ endDate, unit }: PaceAnalysisChartPr
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
   const dotRefs = useRef<(SVGCircleElement | null)[]>([]);
   const chartRef = useRef<HTMLDivElement>(null);
-  
+
   const startDate = useMemo(() => {
     const start = new Date(weeks[0]);
     start.setHours(0, 0, 0, 0);
@@ -65,38 +57,57 @@ export default function PaceAnalysisChart({ endDate, unit }: PaceAnalysisChartPr
   const sortedActivities = useMemo(() => {
     return [...activities]
       .filter(activity => activity.average_speed > 0 && !isActivityDisabled(activity.id))
-      .sort((a, b) => 
+      .sort((a, b) =>
         new Date(a.start_date).getTime() - new Date(b.start_date).getTime()
       );
   }, [activities, isActivityDisabled]);
 
   const paceData = useMemo(() => {
     return sortedActivities.map(activity => {
-      const minutesPerUnit = unit === 'kilometers' 
+      const minutesPerUnit = unit === 'kilometers'
         ? 16.6667 / activity.average_speed
         : 26.8224 / activity.average_speed;
-      
+
       const distance = metersToMiles(activity.distance);
       const convertedDistance = unit === 'kilometers' ? milesToKm(distance) : distance;
-      
+
       return {
         name: activity.name,
-        date: formatDate(activity.start_date),
+        date: formatWeekLabel(new Date(activity.start_date)), // Still useful for tooltip
         pace: minutesPerUnit,
         paceDisplay: formatPace(activity.average_speed, unit),
-        distance: convertedDistance
+        distance: convertedDistance,
+        timestamp: new Date(activity.start_date).getTime()
       };
     });
   }, [sortedActivities, unit]);
 
+  // Generate week labels specifically for time-based axis
+  const weekLabels = useMemo(() => {
+    return weeks.map(weekStart => ({
+      date: weekStart,
+      label: formatWeekLabel(weekStart),
+      timestamp: weekStart.getTime()
+    }));
+  }, [weeks]);
+
+  // Calculate scaled X position based on time
+  const minTime = startDate.getTime();
+  const maxTime = apiEndDate.getTime();
+  const timeRange = maxTime - minTime;
+
+  const getXPosition = (timestamp: number) => {
+    return ((timestamp - minTime) / timeRange) * 90 + 5;
+  };
+
   // Calculate min and max pace for scaling
   const { minPace, maxPace } = useMemo(() => {
     if (paceData.length === 0) return { minPace: 0, maxPace: 20 };
-    
+
     const paces = paceData.map(d => d.pace);
     const min = Math.min(...paces);
     const max = Math.max(...paces);
-    
+
     // Add some padding to the range
     const padding = (max - min) * 0.1;
     return {
@@ -105,34 +116,37 @@ export default function PaceAnalysisChart({ endDate, unit }: PaceAnalysisChartPr
     };
   }, [paceData]);
 
-  const unitLabel = unit === 'kilometers' ? 'km' : 'mi';
-  const paceLabel = unit === 'kilometers' ? 'min/km' : 'min/mi';
-
-  // Calculate linear regression for trend line
+  // Calculate trends
   const trendLine = useMemo(() => {
     if (paceData.length < 2) return null;
-    
-    // Use x as index (0 to n-1) and y as pace
+
     const n = paceData.length;
     let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
-    
-    paceData.forEach((data, index) => {
-      sumX += index;
+
+    const normalizeTime = (t: number) => (t - minTime) / (24 * 60 * 60 * 1000);
+
+    paceData.forEach((data) => {
+      const x = normalizeTime(data.timestamp);
+      sumX += x;
       sumY += data.pace;
-      sumXY += index * data.pace;
-      sumX2 += index * index;
+      sumXY += x * data.pace;
+      sumX2 += x * x;
     });
-    
-    // Calculate slope (m) and intercept (b) for y = mx + b
-    const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+
+    const denominator = (n * sumX2 - sumX * sumX);
+    if (denominator === 0) return null;
+
+    const slope = (n * sumXY - sumX * sumY) / denominator;
     const intercept = (sumY - slope * sumX) / n;
-    
-    // Calculate trend line points
-    const startY = intercept;
-    const endY = slope * (n - 1) + intercept;
-    
+
+    const startX = normalizeTime(minTime);
+    const endX = normalizeTime(maxTime);
+
+    const startY = slope * startX + intercept;
+    const endY = slope * endX + intercept;
+
     return { slope, intercept, startY, endY };
-  }, [paceData]);
+  }, [paceData, minTime, maxTime]);
 
   const updateTooltipPosition = (index: number, event: React.MouseEvent<SVGCircleElement>) => {
     if (chartRef.current) {
@@ -142,11 +156,11 @@ export default function PaceAnalysisChart({ endDate, unit }: PaceAnalysisChartPr
         const circle = event.currentTarget;
         const cx = parseFloat(circle.getAttribute('cx') || '0');
         const cy = parseFloat(circle.getAttribute('cy') || '0');
-        
+
         // Convert percentage to pixels
         const xPos = (cx / 100) * svgRect.width;
         const yPos = (cy / 100) * svgRect.height;
-        
+
         setTooltipPosition({
           x: xPos,
           y: yPos
@@ -156,7 +170,6 @@ export default function PaceAnalysisChart({ endDate, unit }: PaceAnalysisChartPr
   };
 
   const handleDotHover = (index: number, event: React.MouseEvent<SVGCircleElement>) => {
-    // Only show hover tooltip if no dot is clicked (persistent)
     if (clickedDot === null) {
       setHoveredDot(index);
       updateTooltipPosition(index, event);
@@ -166,19 +179,16 @@ export default function PaceAnalysisChart({ endDate, unit }: PaceAnalysisChartPr
   const handleDotClick = (index: number, event: React.MouseEvent<SVGCircleElement>) => {
     event.stopPropagation();
     if (clickedDot === index) {
-      // Clicking the same dot closes it
       setClickedDot(null);
       setTooltipPosition(null);
     } else {
-      // Click makes it persistent
       setClickedDot(index);
-      setHoveredDot(null); // Clear hover state
+      setHoveredDot(null);
       updateTooltipPosition(index, event);
     }
   };
 
   const handleDotLeave = () => {
-    // Only clear hover tooltip if no dot is clicked
     if (clickedDot === null) {
       setHoveredDot(null);
       setTooltipPosition(null);
@@ -194,7 +204,7 @@ export default function PaceAnalysisChart({ endDate, unit }: PaceAnalysisChartPr
   if (loading) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-        <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white">Pace Analysis</h2>
+        <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white">Pace Chart</h2>
         <div className="flex items-center justify-center py-12">
           <div className="text-gray-500 dark:text-gray-400">Loading pace data...</div>
         </div>
@@ -205,7 +215,7 @@ export default function PaceAnalysisChart({ endDate, unit }: PaceAnalysisChartPr
   if (error) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-        <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white">Pace Analysis</h2>
+        <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white">Pace Chart</h2>
         <div className="flex items-center justify-center py-12">
           <div className="text-red-500">Error loading pace data: {error}</div>
         </div>
@@ -216,7 +226,7 @@ export default function PaceAnalysisChart({ endDate, unit }: PaceAnalysisChartPr
   if (paceData.length === 0) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-        <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white">Pace Analysis</h2>
+        <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white">Pace Chart</h2>
         <div className="flex items-center justify-center py-12">
           <div className="text-gray-500 dark:text-gray-400">No activities with pace data available</div>
         </div>
@@ -227,9 +237,9 @@ export default function PaceAnalysisChart({ endDate, unit }: PaceAnalysisChartPr
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 sm:p-6">
       <h2 className="text-xl sm:text-2xl font-bold mb-6 text-gray-800 dark:text-white">
-        Pace Analysis
+        Pace Chart
       </h2>
-      
+
       <div className="space-y-6">
         {/* Chart */}
         <div className="relative">
@@ -247,7 +257,7 @@ export default function PaceAnalysisChart({ endDate, unit }: PaceAnalysisChartPr
                 );
               })}
             </div>
-            
+
             {/* Chart area */}
             <div ref={chartRef} className="flex-1 relative h-[500px] border-l border-b border-gray-300 dark:border-gray-600 pb-20">
               <svg className="absolute inset-0 w-full h-full" style={{ overflow: 'visible' }}>
@@ -265,7 +275,7 @@ export default function PaceAnalysisChart({ endDate, unit }: PaceAnalysisChartPr
                     strokeDasharray="4 4"
                   />
                 ))}
-                
+
                 {/* Trend line */}
                 {trendLine && (
                   <line
@@ -273,17 +283,17 @@ export default function PaceAnalysisChart({ endDate, unit }: PaceAnalysisChartPr
                     y1={`${95 - (((trendLine.startY - minPace) / (maxPace - minPace)) * 85)}%`}
                     x2="95%"
                     y2={`${95 - (((trendLine.endY - minPace) / (maxPace - minPace)) * 85)}%`}
-                    stroke={trendLine.slope < 0 ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)'}
+                    stroke={trendLine.slope < 0 ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)'} // Lower pace is better (faster)
                     strokeWidth="2"
                     strokeDasharray="8 4"
                     className="opacity-60"
                   />
                 )}
-                
+
                 {/* Connect dots with line */}
                 <polyline
-                  points={paceData.map((data, index) => {
-                    const x = ((index / Math.max(paceData.length - 1, 1)) * 90) + 5;
+                  points={paceData.map((data) => {
+                    const x = getXPosition(data.timestamp);
                     const y = 95 - (((data.pace - minPace) / (maxPace - minPace)) * 85);
                     return `${x}%,${y}%`;
                   }).join(' ')}
@@ -292,12 +302,12 @@ export default function PaceAnalysisChart({ endDate, unit }: PaceAnalysisChartPr
                   strokeWidth="3"
                   className="transition-all"
                 />
-                
+
                 {/* Draw dots */}
                 {paceData.map((data, index) => {
-                  const xPercent = ((index / Math.max(paceData.length - 1, 1)) * 90) + 5;
+                  const xPercent = getXPosition(data.timestamp);
                   const yPercent = 95 - (((data.pace - minPace) / (maxPace - minPace)) * 85);
-                  
+
                   return (
                     <g key={index}>
                       <circle
@@ -327,11 +337,11 @@ export default function PaceAnalysisChart({ endDate, unit }: PaceAnalysisChartPr
                   );
                 })}
               </svg>
-              
-              {/* Tooltip - Rendered outside SVG for proper z-index */}
+
+              {/* Tooltip */}
               {(clickedDot !== null || hoveredDot !== null) && tooltipPosition && sortedActivities[clickedDot ?? hoveredDot ?? 0] && (
-                <div 
-                  className="absolute z-9999 pointer-events-auto"
+                <div
+                  className="absolute z-50 pointer-events-auto"
                   style={{
                     left: `${tooltipPosition.x}px`,
                     top: `${tooltipPosition.y}px`,
@@ -348,23 +358,23 @@ export default function PaceAnalysisChart({ endDate, unit }: PaceAnalysisChartPr
                   />
                 </div>
               )}
-              
+
               {/* X-axis labels */}
               <div className="absolute inset-x-0 bottom-0">
-                {paceData.map((data, index) => {
-                  const xPercent = ((index / Math.max(paceData.length - 1, 1)) * 90) + 5;
-                  
+                {weekLabels.map((week, index) => {
+                  const xPercent = getXPosition(week.timestamp);
+
                   return (
-                    <div 
+                    <div
                       key={index}
                       className="absolute text-xs text-gray-600 dark:text-gray-400 text-center"
-                      style={{ 
+                      style={{
                         left: `${xPercent}%`,
                         bottom: '0',
                         transform: 'translateX(-50%)'
                       }}
                     >
-                      {data.date}
+                      {week.label}
                     </div>
                   );
                 })}
