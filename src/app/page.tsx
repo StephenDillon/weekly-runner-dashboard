@@ -11,6 +11,7 @@ import EightyTwentyChart from "./components/EightyTwentyChart";
 import RacesTab from "./components/RacesTab";
 import ChartsTab from "./components/ChartsTab";
 import RaceCountdownCard from "./components/RaceCountdownCard";
+import ReleaseNotesTab from "./components/ReleaseNotesTab";
 import { getLastFullWeek } from "./utils/dateUtils";
 import { useUnit } from "./context/UnitContext";
 import { useStravaAuth } from "./context/StravaAuthContext";
@@ -18,7 +19,7 @@ import { useWeekStart } from "./context/WeekStartContext";
 import { useHeartRateZones } from "./context/HeartRateZonesContext";
 import { useRaces } from "./hooks/useRaces";
 
-type TabType = 'dashboard' | 'detailed' | 'charts' | 'races';
+type TabType = 'dashboard' | 'detailed' | 'charts' | 'races' | 'release-notes';
 
 export default function Home() {
   const { weekStartDay } = useWeekStart();
@@ -137,6 +138,15 @@ export default function Home() {
             >
               Races
             </button>
+            <button
+              onClick={() => setActiveTab('release-notes')}
+              className={`py-4 px-1 border-b-2 font-medium transition-colors whitespace-nowrap ${activeTab === 'release-notes'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                }`}
+            >
+              Release Notes
+            </button>
           </nav>
         </div>
 
@@ -172,6 +182,10 @@ export default function Home() {
 
         {activeTab === 'races' && (
           <RacesTab races={races} onAddRace={addRace} onRemoveRace={removeRace} />
+        )}
+
+        {activeTab === 'release-notes' && (
+          <ReleaseNotesTab />
         )}
       </div>
     </div>
