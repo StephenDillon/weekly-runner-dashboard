@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState, useRef } from 'react';
-import { getWeeksBack, formatWeekLabel } from '../utils/dateUtils';
+import { getWeeksBack, formatWeekLabel, getMonthsBack, formatMonthLabel } from '../utils/dateUtils';
 import { useStravaActivities } from '../hooks/useStravaActivities';
 import { metersToMiles } from '../utils/activityAggregation';
 import { useWeekStart } from '../context/WeekStartContext';
@@ -29,10 +29,15 @@ function formatPace(metersPerSecond: number, unit: 'miles' | 'kilometers'): stri
 }
 
 export default function PaceAnalysisChart({ endDate, unit }: PaceAnalysisChartProps) {
-  const { weeksToDisplay } = useWeekStart();
+  const { weeksToDisplay, viewMode, monthsToDisplay } = useWeekStart();
   const { activityType } = useActivityType();
   const { isActivityDisabled, toggleActivity } = useDisabledActivities();
-  const weeks = getWeeksBack(weeksToDisplay, endDate);
+  const weeks = useMemo(() => {
+    if (viewMode === 'monthly') {
+      return getMonthsBack(monthsToDisplay, endDate);
+    }
+    return getWeeksBack(weeksToDisplay, endDate);
+  }, [viewMode, monthsToDisplay, weeksToDisplay, endDate]);
   const [hoveredDot, setHoveredDot] = useState<number | null>(null);
   const [clickedDot, setClickedDot] = useState<number | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
@@ -47,10 +52,14 @@ export default function PaceAnalysisChart({ endDate, unit }: PaceAnalysisChartPr
 
   const apiEndDate = useMemo(() => {
     const end = new Date(endDate);
-    end.setDate(end.getDate() + 7);
-    end.setHours(23, 59, 59, 999);
+    if (viewMode === 'monthly') {
+      end.setHours(23, 59, 59, 999);
+    } else {
+      end.setDate(end.getDate() + 7);
+      end.setHours(23, 59, 59, 999);
+    }
     return end;
-  }, [endDate]);
+  }, [endDate, viewMode]);
 
   const { activities, loading, error } = useStravaActivities(startDate, apiEndDate);
 
@@ -82,14 +91,14 @@ export default function PaceAnalysisChart({ endDate, unit }: PaceAnalysisChartPr
     });
   }, [sortedActivities, unit]);
 
-  // Generate week labels specifically for time-based axis
-  const weekLabels = useMemo(() => {
-    return weeks.map(weekStart => ({
-      date: weekStart,
-      label: formatWeekLabel(weekStart),
-      timestamp: weekStart.getTime()
+  // Generate labels specifically for time-based axis
+  const timeLabels = useMemo(() => {
+    return weeks.map(date => ({
+      date: date,
+      label: viewMode === 'monthly' ? formatMonthLabel(date) : formatWeekLabel(date),
+      timestamp: date.getTime()
     }));
-  }, [weeks]);
+  }, [weeks, viewMode]);
 
   // Calculate scaled X position based on time
   const minTime = startDate.getTime();
@@ -357,8 +366,8 @@ export default function PaceAnalysisChart({ endDate, unit }: PaceAnalysisChartPr
 
               {/* X-axis labels */}
               <div className="absolute inset-x-0 bottom-0">
-                {weekLabels.map((week, index) => {
-                  const xPercent = getXPosition(week.timestamp);
+                {timeLabels.map((item, index) => {
+                  const xPercent = getXPosition(item.timestamp);
 
                   return (
                     <div
@@ -370,7 +379,7 @@ export default function PaceAnalysisChart({ endDate, unit }: PaceAnalysisChartPr
                         transform: 'translateX(-50%)'
                       }}
                     >
-                      {week.label}
+                      {item.label}
                     </div>
                   );
                 })}

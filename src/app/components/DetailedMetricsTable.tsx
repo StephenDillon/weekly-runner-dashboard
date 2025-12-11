@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { getWeeksBack, formatWeekLabel, formatWeekTooltip } from '../utils/dateUtils';
+import { getWeeksBack, formatWeekLabel, formatWeekTooltip, getMonthsBack } from '../utils/dateUtils';
 import { useStravaActivities } from '../hooks/useStravaActivities';
 import { aggregateActivitiesByWeek, generateWeekStarts, metersToMiles } from '../utils/activityAggregation';
 import { useWeekStart } from '../context/WeekStartContext';
@@ -122,10 +122,15 @@ interface WeekMetrics {
 }
 
 export default function DetailedMetricsTable({ endDate, unit }: DetailedMetricsTableProps) {
-  const { weekStartDay, weeksToDisplay } = useWeekStart();
+  const { weekStartDay, weeksToDisplay, viewMode, monthsToDisplay } = useWeekStart();
   const { isActivityDisabled, toggleActivity } = useDisabledActivities();
   const { activityType } = useActivityType();
-  const weeks = getWeeksBack(weeksToDisplay, endDate);
+  const weeks = useMemo(() => {
+    if (viewMode === 'monthly') {
+      return getMonthsBack(monthsToDisplay, endDate);
+    }
+    return getWeeksBack(weeksToDisplay, endDate);
+  }, [viewMode, monthsToDisplay, weeksToDisplay, endDate]);
 
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -249,10 +254,14 @@ export default function DetailedMetricsTable({ endDate, unit }: DetailedMetricsT
 
   const apiEndDate = useMemo(() => {
     const end = new Date(endDate);
-    end.setDate(end.getDate() + 7);
-    end.setHours(23, 59, 59, 999);
+    if (viewMode === 'monthly') {
+      end.setHours(23, 59, 59, 999);
+    } else {
+      end.setDate(end.getDate() + 7);
+      end.setHours(23, 59, 59, 999);
+    }
     return end;
-  }, [endDate]);
+  }, [endDate, viewMode]);
 
   // Request zones if any zone column is visible
   const includeZones = useMemo(() => {

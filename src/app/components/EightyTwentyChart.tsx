@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useMemo, useState, useRef } from 'react';
-import { getWeeksBack, formatWeekLabel, formatWeekTooltip } from '../utils/dateUtils';
+import { getWeeksBack, formatWeekLabel, formatWeekTooltip, getMonthsBack, formatMonthLabel, formatMonthTooltip } from '../utils/dateUtils';
 import { useStravaActivities } from '../hooks/useStravaActivities';
-import { generateWeekStarts, metersToMiles } from '../utils/activityAggregation';
+import { generateWeekStarts, metersToMiles, generateMonthStarts } from '../utils/activityAggregation';
 import { useWeekStart } from '../context/WeekStartContext';
 import { useDisabledActivities } from '../context/DisabledActivitiesContext';
 import { useHeartRateZones } from '../context/HeartRateZonesContext';
@@ -45,10 +45,16 @@ function formatTimeReadable(seconds: number): string {
 }
 
 export default function EightyTwentyChart({ endDate, unit }: EightyTwentyChartProps) {
-  const { weekStartDay, weeksToDisplay } = useWeekStart();
+  const { weekStartDay, weeksToDisplay, viewMode, monthsToDisplay } = useWeekStart();
   const { disabledActivities } = useDisabledActivities();
   const { maxHeartRate, zones } = useHeartRateZones();
-  const weeks = getWeeksBack(weeksToDisplay, endDate);
+  const weeks = useMemo(() => {
+    if (viewMode === 'monthly') {
+      return getMonthsBack(monthsToDisplay, endDate);
+    }
+    return getWeeksBack(weeksToDisplay, endDate);
+  }, [viewMode, monthsToDisplay, weeksToDisplay, endDate]);
+
   const [hoveredWeek, setHoveredWeek] = useState<number | null>(null);
 
   const startDate = useMemo(() => {
@@ -59,10 +65,14 @@ export default function EightyTwentyChart({ endDate, unit }: EightyTwentyChartPr
 
   const apiEndDate = useMemo(() => {
     const end = new Date(endDate);
-    end.setDate(end.getDate() + 7);
-    end.setHours(23, 59, 59, 999);
+    if (viewMode === 'monthly') {
+      end.setHours(23, 59, 59, 999);
+    } else {
+      end.setDate(end.getDate() + 7);
+      end.setHours(23, 59, 59, 999);
+    }
     return end;
-  }, [endDate]);
+  }, [endDate, viewMode]);
 
   const { activities, loading, error } = useStravaActivities(startDate, apiEndDate, true);
 
@@ -102,18 +112,27 @@ export default function EightyTwentyChart({ endDate, unit }: EightyTwentyChartPr
   }, [activities, disabledActivities, stravaZones, maxHeartRate]);
 
   const weeklyData = useMemo(() => {
-    const weekStarts = generateWeekStarts(endDate, weeksToDisplay);
+    let periods: Date[];
+    if (viewMode === 'monthly') {
+      periods = generateMonthStarts(endDate, monthsToDisplay);
+    } else {
+      periods = generateWeekStarts(endDate, weeksToDisplay);
+    }
 
-    return weekStarts.map((weekStart) => {
-      const weekEnd = new Date(weekStart);
-      weekEnd.setDate(weekEnd.getDate() + 7);
+    return periods.map((periodStart) => {
+      const periodEnd = new Date(periodStart);
+      if (viewMode === 'monthly') {
+        periodEnd.setMonth(periodEnd.getMonth() + 1);
+      } else {
+        periodEnd.setDate(periodEnd.getDate() + 7);
+      }
 
-      const weekActivities = activities.filter((activity) => {
+      const periodActivities = activities.filter((activity) => {
         const activityDate = new Date(activity.start_date);
-        return activityDate >= weekStart && activityDate < weekEnd;
+        return activityDate >= periodStart && activityDate < periodEnd;
       });
 
-      const enabledActivities = weekActivities.filter(
+      const enabledActivities = periodActivities.filter(
         (activity) => !disabledActivities.has(activity.id)
       );
 
@@ -161,7 +180,7 @@ export default function EightyTwentyChart({ endDate, unit }: EightyTwentyChartPr
       const hardPercent = totalMiles > 0 ? (hardMiles / totalMiles) * 100 : 0;
 
       return {
-        weekStart,
+        weekStart: periodStart,
         easyMiles,
         hardMiles,
         totalMiles,
@@ -174,12 +193,12 @@ export default function EightyTwentyChart({ endDate, unit }: EightyTwentyChartPr
         zone5Time,
       };
     });
-  }, [activities, endDate, disabledActivities, weeksToDisplay]);
+  }, [activities, endDate, disabledActivities, weeksToDisplay, monthsToDisplay, viewMode]);
 
   const convertedData = useMemo(() => {
     const data = weeks.map((date, index) => ({
-      week: formatWeekLabel(date),
-      weekTooltip: formatWeekTooltip(date, weekStartDay),
+      week: viewMode === 'monthly' ? formatMonthLabel(date) : formatWeekLabel(date),
+      weekTooltip: viewMode === 'monthly' ? formatMonthTooltip(date) : formatWeekTooltip(date, weekStartDay),
       weekStartDate: new Date(date),
       easyMiles: unit === 'kilometers'
         ? milesToKm(weeklyData[index]?.easyMiles || 0)
@@ -200,7 +219,7 @@ export default function EightyTwentyChart({ endDate, unit }: EightyTwentyChartPr
     }));
     // Reverse to show newest first
     return data.reverse();
-  }, [weeks, weeklyData, unit, weekStartDay]);
+  }, [weeks, weeklyData, unit, weekStartDay, viewMode]);
 
   const maxDistance = Math.max(...convertedData.map(d => d.totalMiles), 1);
   const unitLabel = unit === 'kilometers' ? 'km' : 'mi';
@@ -265,19 +284,23 @@ export default function EightyTwentyChart({ endDate, unit }: EightyTwentyChartPr
         {convertedData.map((data, index) => {
           const isHovered = hoveredWeek === index;
 
-          // Check if current date is within this week
+          // Check if current date is within this period
           const now = new Date();
-          const weekEnd = new Date(data.weekStartDate);
-          weekEnd.setDate(weekEnd.getDate() + 7);
-          const isCurrentWeek = now >= data.weekStartDate && now < weekEnd;
+          const periodEnd = new Date(data.weekStartDate);
+          if (viewMode === 'monthly') {
+            periodEnd.setMonth(periodEnd.getMonth() + 1);
+          } else {
+            periodEnd.setDate(periodEnd.getDate() + 7);
+          }
+          const isCurrentPeriod = now >= data.weekStartDate && now < periodEnd;
 
           // Build tooltip with zone times
           const zoneTooltip = `Zone 1: ${formatTimeReadable(data.zone1Time)}\nZone 2: ${formatTimeReadable(data.zone2Time)}\nZone 3: ${formatTimeReadable(data.zone3Time)}\nZone 4: ${formatTimeReadable(data.zone4Time)}\nZone 5: ${formatTimeReadable(data.zone5Time)}`;
 
           return (
             <div key={index} className="flex items-center gap-2 sm:gap-3 relative">
-              <div className={`w-12 sm:w-20 text-[10px] sm:text-sm font-medium text-gray-600 dark:text-gray-300 cursor-help ${isCurrentWeek ? 'font-bold' : ''}`} title={data.weekTooltip}>
-                {isCurrentWeek ? 'Current Week' : data.week}
+              <div className={`w-12 sm:w-20 text-[10px] sm:text-sm font-medium text-gray-600 dark:text-gray-300 cursor-help ${isCurrentPeriod ? 'font-bold' : ''}`} title={data.weekTooltip}>
+                {isCurrentPeriod ? (viewMode === 'monthly' ? 'Current' : 'Current') : data.week}
               </div>
               <div
                 className="flex-1 relative h-6 sm:h-8 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700"

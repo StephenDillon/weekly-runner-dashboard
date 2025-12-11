@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useMemo, useState, useRef } from 'react';
-import { getWeeksBack, formatWeekLabel, formatWeekTooltip } from '../utils/dateUtils';
+import { getWeeksBack, formatWeekLabel, formatWeekTooltip, getMonthsBack, formatMonthLabel, formatMonthTooltip } from '../utils/dateUtils';
 import { useStravaActivities } from '../hooks/useStravaActivities';
-import { generateWeekStarts, metersToMiles } from '../utils/activityAggregation';
+import { generateWeekStarts, metersToMiles, aggregateActivitiesByMonth, generateMonthStarts } from '../utils/activityAggregation';
 import { useWeekStart } from '../context/WeekStartContext';
 import { useDisabledActivities } from '../context/DisabledActivitiesContext';
 import { useActivityType } from '../context/ActivityTypeContext';
@@ -24,10 +24,15 @@ interface LongestDistanceChartProps {
 const milesToKm = (miles: number) => miles * 1.60934;
 
 export default function LongestDistanceChart({ endDate, unit }: LongestDistanceChartProps) {
-  const { weekStartDay, weeksToDisplay } = useWeekStart();
+  const { weekStartDay, weeksToDisplay, viewMode, monthsToDisplay } = useWeekStart();
   const { disabledActivities, toggleActivity, isActivityDisabled } = useDisabledActivities();
   const { activityType } = useActivityType();
-  const weeks = getWeeksBack(weeksToDisplay, endDate);
+  const weeks = useMemo(() => {
+    if (viewMode === 'monthly') {
+      return getMonthsBack(monthsToDisplay, endDate);
+    }
+    return getWeeksBack(weeksToDisplay, endDate);
+  }, [viewMode, monthsToDisplay, weeksToDisplay, endDate]);
   const [hoveredWeek, setHoveredWeek] = useState<number | null>(null);
   const [lockedWeek, setLockedWeek] = useState<number | null>(null);
   const tooltipRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -56,7 +61,7 @@ export default function LongestDistanceChart({ endDate, unit }: LongestDistanceC
   const isOpen = (index: number) => {
     return lockedWeek === index || (lockedWeek === null && hoveredWeek === index);
   };
-  
+
   const startDate = useMemo(() => {
     const start = new Date(weeks[0]);
     start.setHours(0, 0, 0, 0);
@@ -65,26 +70,39 @@ export default function LongestDistanceChart({ endDate, unit }: LongestDistanceC
 
   const apiEndDate = useMemo(() => {
     const end = new Date(endDate);
-    end.setDate(end.getDate() + 7);
-    end.setHours(23, 59, 59, 999);
+    if (viewMode === 'monthly') {
+      end.setHours(23, 59, 59, 999);
+    } else {
+      end.setDate(end.getDate() + 7);
+      end.setHours(23, 59, 59, 999);
+    }
     return end;
-  }, [endDate]);
+  }, [endDate, viewMode]);
 
   const { activities, loading, error } = useStravaActivities(startDate, apiEndDate);
 
   const weeklyLongestRuns = useMemo(() => {
-    const weekStarts = generateWeekStarts(endDate, weeksToDisplay);
-    
-    return weekStarts.map((weekStart) => {
-      const weekEnd = new Date(weekStart);
-      weekEnd.setDate(weekEnd.getDate() + 7);
+    let periods: Date[];
+    if (viewMode === 'monthly') {
+      periods = generateMonthStarts(endDate, monthsToDisplay);
+    } else {
+      periods = generateWeekStarts(endDate, weeksToDisplay);
+    }
 
-      const weekActivities = activities.filter((activity) => {
+    return periods.map((periodStart) => {
+      const periodEnd = new Date(periodStart);
+      if (viewMode === 'monthly') {
+        periodEnd.setMonth(periodEnd.getMonth() + 1);
+      } else {
+        periodEnd.setDate(periodEnd.getDate() + 7);
+      }
+
+      const periodActivities = activities.filter((activity) => {
         const activityDate = new Date(activity.start_date);
-        return activityDate >= weekStart && activityDate < weekEnd;
+        return activityDate >= periodStart && activityDate < periodEnd;
       });
 
-      const enabledActivities = weekActivities.filter(
+      const enabledActivities = periodActivities.filter(
         (activity) => !disabledActivities.has(activity.id)
       );
 
@@ -96,31 +114,31 @@ export default function LongestDistanceChart({ endDate, unit }: LongestDistanceC
       }, null);
 
       return {
-        weekStart,
-        allActivities: weekActivities,
+        weekStart: periodStart,
+        allActivities: periodActivities,
         longestRun,
         longestDistance: longestRun ? metersToMiles(longestRun.distance) : 0,
       };
     });
-  }, [activities, endDate, disabledActivities, weeksToDisplay]);
+  }, [activities, endDate, disabledActivities, weeksToDisplay, monthsToDisplay, viewMode]);
 
   const convertedData = useMemo(() => {
     const data = weeks.map((date, index) => ({
-      week: formatWeekLabel(date),
-      weekTooltip: formatWeekTooltip(date, weekStartDay),
+      week: viewMode === 'monthly' ? formatMonthLabel(date) : formatWeekLabel(date),
+      weekTooltip: viewMode === 'monthly' ? formatMonthTooltip(date) : formatWeekTooltip(date, weekStartDay),
       weekStartDate: new Date(date),
-      distance: unit === 'kilometers' 
+      distance: unit === 'kilometers'
         ? milesToKm(weeklyLongestRuns[index]?.longestDistance || 0)
         : (weeklyLongestRuns[index]?.longestDistance || 0)
     }));
     // Reverse to show newest first
     return data.reverse();
-  }, [weeks, weeklyLongestRuns, unit, weekStartDay]);
-  
+  }, [weeks, weeklyLongestRuns, unit, weekStartDay, viewMode]);
+
   const maxDistance = Math.max(...convertedData.map(d => d.distance), 1);
   const unitLabel = unit === 'kilometers' ? 'km' : 'mi';
   const unitLabelLong = unit === 'kilometers' ? 'kilometers' : 'miles';
-  
+
   if (loading) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 flex flex-col h-full">
@@ -145,7 +163,7 @@ export default function LongestDistanceChart({ endDate, unit }: LongestDistanceC
 
   const totalLongest = convertedData.reduce((sum, d) => sum + d.distance, 0);
   const weeksWithActivities = convertedData.filter(d => d.distance > 0);
-  const avgLongest = weeksWithActivities.length > 0 
+  const avgLongest = weeksWithActivities.length > 0
     ? weeksWithActivities.reduce((sum, d) => sum + d.distance, 0) / weeksWithActivities.length
     : 0;
   const maxLongest = Math.max(...convertedData.map(d => d.distance));
@@ -158,41 +176,45 @@ export default function LongestDistanceChart({ endDate, unit }: LongestDistanceC
         <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 italic">Tap bar to view activities</span>
       </div>
       <div className="space-y-2 sm:space-y-3 flex-1" style={{ minHeight: '250px' }}>
-          {convertedData.map((data, index) => {
-            // Get the original index (reversed)
-            const originalIndex = convertedData.length - 1 - index;
-            const open = isOpen(index);
-            const longestActivity = weeklyLongestRuns[originalIndex]?.longestRun;
-            
-            // Check if current date is within this week
-            const now = new Date();
-            const weekEnd = new Date(data.weekStartDate);
-            weekEnd.setDate(weekEnd.getDate() + 7);
-            const isCurrentWeek = now >= data.weekStartDate && now < weekEnd;
-            
-            return (
-              <div key={index} className="flex items-center gap-2 sm:gap-3 relative">
-                <div className={`w-12 sm:w-20 text-[10px] sm:text-sm font-medium text-gray-600 dark:text-gray-300 cursor-help ${isCurrentWeek ? 'font-bold' : ''}`} title={data.weekTooltip}>
-                  {isCurrentWeek ? 'Current Week' : data.week}
-                </div>
-                <div 
-                  ref={(el) => { barRefs.current[index] = el; }}
-                  className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-6 sm:h-8 relative overflow-visible"
-                  onClick={() => toggleWeek(index)}
-                  onMouseEnter={() => handleMouseEnter(index)}
-                  onMouseLeave={handleMouseLeave}
-                >
-                  {data.distance > 0 && (
-                    <div
-                      className="bg-linear-to-r from-blue-500 to-indigo-600 h-full rounded-full flex items-center justify-end pr-2 sm:pr-3 transition-all duration-500 cursor-pointer hover:opacity-90"
-                      style={{ width: `${(data.distance / maxDistance) * 100}%` }}
-                    >
-                      <span className="text-white text-xs sm:text-sm font-semibold">
-                        {data.distance.toFixed(1)} {unitLabel}
-                      </span>
-                    </div>
-                  )}
-                
+        {convertedData.map((data, index) => {
+          // Get the original index (reversed)
+          const originalIndex = convertedData.length - 1 - index;
+          const open = isOpen(index);
+          const longestActivity = weeklyLongestRuns[originalIndex]?.longestRun;
+
+          // Check if current date is within this period
+          const now = new Date();
+          const periodEnd = new Date(data.weekStartDate);
+          if (viewMode === 'monthly') {
+            periodEnd.setMonth(periodEnd.getMonth() + 1);
+          } else {
+            periodEnd.setDate(periodEnd.getDate() + 7);
+          }
+          const isCurrentPeriod = now >= data.weekStartDate && now < periodEnd;
+
+          return (
+            <div key={index} className="flex items-center gap-2 sm:gap-3 relative">
+              <div className={`w-12 sm:w-20 text-[10px] sm:text-sm font-medium text-gray-600 dark:text-gray-300 cursor-help ${isCurrentPeriod ? 'font-bold' : ''}`} title={data.weekTooltip}>
+                {isCurrentPeriod ? (viewMode === 'monthly' ? 'Current Month' : 'Current Week') : data.week}
+              </div>
+              <div
+                ref={(el) => { barRefs.current[index] = el; }}
+                className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-6 sm:h-8 relative overflow-visible"
+                onClick={() => toggleWeek(index)}
+                onMouseEnter={() => handleMouseEnter(index)}
+                onMouseLeave={handleMouseLeave}
+              >
+                {data.distance > 0 && (
+                  <div
+                    className="bg-linear-to-r from-blue-500 to-indigo-600 h-full rounded-full flex items-center justify-end pr-2 sm:pr-3 transition-all duration-500 cursor-pointer hover:opacity-90"
+                    style={{ width: `${(data.distance / maxDistance) * 100}%` }}
+                  >
+                    <span className="text-white text-xs sm:text-sm font-semibold">
+                      {data.distance.toFixed(1)} {unitLabel}
+                    </span>
+                  </div>
+                )}
+
                 {open && longestActivity && (
                   <div ref={(el) => { tooltipRefs.current[index] = el; }}>
                     <div className="absolute left-0 sm:left-0 top-10 z-50 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg shadow-xl p-2 sm:p-3 w-[calc(100vw-2rem)] sm:w-auto sm:min-w-[300px] max-w-[400px]">
