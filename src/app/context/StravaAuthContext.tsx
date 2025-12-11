@@ -30,18 +30,43 @@ export function StravaAuthProvider({ children }: { children: ReactNode }) {
       if (data.authenticated) {
         setIsAuthenticated(true);
 
-        // Fetch athlete ID if we don't have it
-        if (!athleteId) {
-          const client = await getClientSideStravaClient();
-          if (client) {
-            const service = new StravaService(client);
-            try {
-              const athlete = await service.getAthlete();
-              const id = athlete.id.toString();
-              setAthleteId(id);
-            } catch (e) {
-              console.error('Failed to fetch athlete profile:', e);
+        // prefer the ID from the server-validated cookie
+        if (data.athleteId) {
+          setAthleteId(data.athleteId);
+        } else if (!athleteId) {
+          // Fallback: Check local cache first
+          const CACHE_KEY = 'strava_athlete_cache';
+          const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+
+          try {
+            const cached = localStorage.getItem(CACHE_KEY);
+            let usedCache = false;
+
+            if (cached) {
+              const { id, timestamp } = JSON.parse(cached);
+              if (Date.now() - timestamp < CACHE_DURATION) {
+                setAthleteId(id);
+                usedCache = true;
+              }
             }
+
+            if (!usedCache) {
+              const client = await getClientSideStravaClient();
+              if (client) {
+                const service = new StravaService(client);
+                const athlete = await service.getAthlete();
+                const id = athlete.id.toString();
+                setAthleteId(id);
+
+                // Update cache
+                localStorage.setItem(CACHE_KEY, JSON.stringify({
+                  id,
+                  timestamp: Date.now()
+                }));
+              }
+            }
+          } catch (e) {
+            console.error('Failed to fetch/cache athlete profile:', e);
           }
         }
       } else {
